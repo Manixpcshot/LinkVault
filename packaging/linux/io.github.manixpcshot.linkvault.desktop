@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=LinkVault
+Comment=Save, organize, and find bookmarks
+Exec=LinkVault
+Icon=io.github.manixpcshot.linkvault
+Terminal=false
+Categories=Network;Utility;

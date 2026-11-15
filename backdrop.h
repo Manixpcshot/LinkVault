@@ -5,6 +5,7 @@
 #include <QPixmap>
 #include <QResizeEvent>
 #include <QtMath>
+#include "theme.h"
 
 // Soft gradient background with colored glows and a subtle dot grid (cached).
 // Optional "Mica" material: a heavily blurred copy of the desktop wallpaper that stays fixed to the
@@ -55,6 +56,15 @@ private:
         p.setRenderHint(QPainter::Antialiasing);
         const qreal w = width(), h = height(), m = qMax(w, h);
         const bool mica = hasMaterial();
+
+        if (Theme::isBlack()) {
+            p.fillRect(rect(), Qt::black);
+            if (m_framed) {
+                p.setPen(Theme::colors().border);
+                p.drawRect(QRect(0, 0, width() - 1, height() - 1));
+            }
+            return pm;
+        }
 
         if (mica) {
             // Mica tint: lets ~20% of the wallpaper colour through

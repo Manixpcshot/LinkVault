@@ -1,6 +1,7 @@
 #include <cmath>
 #include "card.h"
 #include "theme.h"
+#include "platform.h"
 #include <QApplication>
 #include <QContextMenuEvent>
 #include <QDrag>
@@ -22,6 +23,10 @@
 namespace {
 struct Palette { QColor bg, border, text, muted, accent, chip; };
 Palette pal(bool dark) {
+    if (dark && Theme::isBlack()) {
+        const auto c = Theme::colors(dark);
+        return {c.card, c.border, c.text, c.muted, c.accent, QColor(255, 255, 255, 22)};
+    }
     return dark ? Palette{QColor("#1B1D2B"), QColor("#2D3044"), QColor("#EEF0F7"),
                           QColor("#8A8FA6"), QColor("#8B7CFF"), QColor(255, 255, 255, 14)}
                 : Palette{QColor("#FFFFFF"), QColor("#E8E6F3"), QColor("#1C1D29"),
@@ -55,12 +60,15 @@ QColor dominant(const QImage& src) {
 QString relTime(qint64 secs) {
     if (secs <= 0) return {};
     const int days = int(QDateTime::fromSecsSinceEpoch(secs).date().daysTo(QDate::currentDate()));
-    if (days <= 0) return "امروز";
-    if (days == 1) return "دیروز";
-    if (days < 7) return QString("%1 روز پیش").arg(days);
-    if (days < 30) return QString("%1 هفته پیش").arg(days / 7);
-    if (days < 365) return QString("%1 ماه پیش").arg(days / 30);
-    return QString("%1 سال پیش").arg(days / 365);
+    if (days <= 0) return "Today";
+    if (days == 1) return "Yesterday";
+    if (days < 7) return QString("%1 days ago").arg(days);
+    if (days < 14) return "1 week ago";
+    if (days < 30) return QString("%1 weeks ago").arg(days / 7);
+    if (days < 60) return "1 month ago";
+    if (days < 365) return QString("%1 months ago").arg(days / 30);
+    if (days < 730) return "1 year ago";
+    return QString("%1 years ago").arg(days / 365);
 }
 
 QVariantAnimation* makeAnim(QWidget* w, qreal* value, int ms, const QEasingCurve& curve) {
@@ -207,10 +215,10 @@ void BookmarkCard::setBookmark(const Bookmark& b) {
     m_health = b.health;
     m_remindAt = b.remindAt;
     QString tip = b.name + "\n" + b.url;
-    if (b.health == HealthBroken) tip += QString::fromUtf8("\n⚠️ این لینک دیگه باز نمیشه (پیدا نشد)");
-    else if (b.health == HealthRedirect) tip += QString::fromUtf8("\n↪ منتقل شده به: ") + b.redirectTo;
+    if (b.health == HealthBroken) tip += QString::fromUtf8("\n⚠️ This page could not be found.");
+    else if (b.health == HealthRedirect) tip += QString::fromUtf8("\n↪ Redirected to: ") + b.redirectTo;
     if (b.remindAt > 0)
-        tip += QString::fromUtf8("\n⏰ یادآوری: ") + QDateTime::fromSecsSinceEpoch(b.remindAt).toString("yyyy/MM/dd  HH:mm");
+        tip += QString::fromUtf8("\n⏰ Reminder: ") + QDateTime::fromSecsSinceEpoch(b.remindAt).toString("yyyy/MM/dd  HH:mm");
     setToolTip(tip);
 
     if (b.pinned != m_pinned || !m_initialized) {
@@ -257,7 +265,7 @@ void BookmarkCard::setCollectionTag(const QString& text, const QColor& color) {
     update();
 }
 
-void BookmarkCard::setDark(bool dark) { if (dark != m_dark) { m_dark = dark; update(); } }
+void BookmarkCard::setDark(bool dark) { m_dark = dark; update(); }
 
 void BookmarkCard::setHighlight(const QStringList& tokens) {
     if (tokens == m_tokens) return;
@@ -301,7 +309,7 @@ void BookmarkCard::drawHighlighted(QPainter& p, const QRectF& r, const QFont& f,
                                    const QColor& color, Qt::TextElideMode mode) {
     const QString shown = QFontMetricsF(f).elidedText(text, mode, r.width());
     QTextLayout layout(shown, f);
-    QTextOption opt(Qt::AlignRight | Qt::AlignAbsolute);
+    QTextOption opt(Qt::AlignLeft | Qt::AlignAbsolute);
     opt.setWrapMode(QTextOption::NoWrap);
     opt.setTextDirection(shown.isRightToLeft() ? Qt::RightToLeft : Qt::LeftToRight);
     layout.setTextOption(opt);
@@ -438,17 +446,18 @@ void BookmarkCard::paintEvent(QPaintEvent*) {
     const QRectF hostR(card.left() + pad, nameR.bottom() + 3, card.width() - 2 * pad - 14, 18);
     p.setPen(Qt::NoPen);
     p.setBrush(m_accent);
-    p.drawEllipse(QPointF(card.right() - pad - 3.5, hostR.center().y()), 3.5, 3.5);
-    drawHighlighted(p, hostR, hf, m_host, c.muted, Qt::ElideMiddle);
+    p.drawEllipse(QPointF(hostR.left() + 3.5, hostR.center().y()), 3.5, 3.5);
+    drawHighlighted(p, hostR.adjusted(13, 0, 13, 0), hf, m_host, c.muted, Qt::ElideMiddle);
 
     // ---- pin button: always visible when pinned, otherwise on hover ----
-    m_pinRect = QRectF(img.left() + 10, img.top() + 10, 32, 32);
-    m_menuRect = QRectF(img.left() + 48, img.top() + 10, 32, 32);
+    const int buttonSize = Platform::mobile ? 42 : 32;
+    m_pinRect = QRectF(img.left() + 10, img.top() + 10, buttonSize, buttonSize);
+    m_menuRect = QRectF(m_pinRect.right() + 8, m_pinRect.top(), buttonSize, buttonSize);
     const qreal pinT = qBound<qreal>(0, m_pinT, 1);
-    const qreal pinVis = qMax(t, pinT);
+    const qreal pinVis = Platform::mobile ? 1.0 : qMax(t, pinT);
     if (pinVis > 0.01) {
         const qreal pop = 1.0 + 0.6 * m_pinT * (1.0 - m_pinT);       // bounce while toggling
-        QRectF pr(0, 0, 32 * pop, 32 * pop);
+        QRectF pr(0, 0, buttonSize * pop, buttonSize * pop);
         pr.moveCenter(m_pinRect.center());
         p.setOpacity(a * pinVis);
         p.setPen(Qt::NoPen);
@@ -465,8 +474,8 @@ void BookmarkCard::paintEvent(QPaintEvent*) {
     }
 
     // ---- hover actions on the image ----
-    if (t > 0.01) {
-        p.setOpacity(a * t);
+    if (t > 0.01 || Platform::mobile) {
+        p.setOpacity(a * (Platform::mobile ? 1.0 : t));
         p.setPen(Qt::NoPen);
         p.setBrush(QColor(15, 15, 30, m_hoverBtn == 2 ? 200 : 150));
         p.drawEllipse(m_menuRect);
@@ -474,9 +483,10 @@ void BookmarkCard::paintEvent(QPaintEvent*) {
         for (int i = -1; i <= 1; ++i)
             p.drawEllipse(m_menuRect.center() + QPointF(i * 6.0, 0), 1.9, 1.9);
 
+        p.setOpacity(a * t);
         QFont of = font(); of.setPixelSize(12); of.setWeight(QFont::DemiBold);
         p.setFont(of);
-        const QString txt = QString::fromUtf8("باز کردن  ↗");
+        const QString txt = QString::fromUtf8("Open ↗");
         const qreal w = QFontMetricsF(of).horizontalAdvance(txt) + 26;
         const QRectF pill(img.right() - 10 - w + 8 * (1 - t), img.top() + 10, w, 32);   // slides in
         p.setBrush(QColor(255, 255, 255, 238));
@@ -552,7 +562,7 @@ void BookmarkCard::paintShimmer(QPainter& p, const QRectF& img) {
 
     QFont f = font(); f.setPixelSize(12); f.setWeight(QFont::DemiBold);
     p.setFont(f);
-    const QString txt = QString::fromUtf8("در حال دریافت پیش‌نمایش…");
+    const QString txt = QString::fromUtf8("Loading preview…");
     const qreal w = QFontMetricsF(f).horizontalAdvance(txt) + 24;
     QRectF pill(0, 0, w, 26);
     pill.moveCenter(QPointF(img.center().x(), img.bottom() - 26));
@@ -650,14 +660,14 @@ void BookmarkCard::contextMenuEvent(QContextMenuEvent* e) { if (!m_removing) sho
 
 void BookmarkCard::showMenu(const QPoint& globalPos) {
     QMenu m(this);
-    auto* open = m.addAction("🌐  باز کردن");
-    auto* pin  = m.addAction(m_pinned ? "📍  برداشتن سنجاق" : "📌  سنجاق کردن");
-    auto* edit = m.addAction("✏️  ویرایش");
-    auto* copy = m.addAction("📋  کپی لینک");
-    auto* refr = m.addAction("🔄  گرفتن دوباره‌ی عکس");
+    auto* open = m.addAction("🌐 Open");
+    auto* pin  = m.addAction(m_pinned ? "📍 Unpin" : "📌 Pin");
+    auto* edit = m.addAction("✏️ Edit");
+    auto* copy = m.addAction("📋 Copy link");
+    auto* refr = m.addAction("🔄 Refresh preview");
     if (menuHook()) { m.addSeparator(); menuHook()(m, m_id); }
     m.addSeparator();
-    auto* del = m.addAction("🗑  حذف");
+    auto* del = m.addAction("🗑 Delete");
     QAction* act = m.exec(globalPos);
     if (act == open) emit openRequested(m_id);
     else if (act == pin) emit pinToggleRequested(m_id);
@@ -673,7 +683,7 @@ AddCard::AddCard(bool dark, QWidget* parent) : QWidget(parent), m_dark(dark) {
     setFixedSize(BookmarkCard::kW, BookmarkCard::kH);
     setAttribute(Qt::WA_Hover);
     setCursor(Qt::PointingHandCursor);
-    setToolTip("افزودن سایت جدید (Ctrl+N)");
+    setToolTip("Add a bookmark (Ctrl+N)");
     m_anim = makeAnim(this, &m_hover, 280, Theme::easeOut());
     m_appearAnim = makeAnim(this, &m_appear, 560, Theme::easeOut());
 }
@@ -738,7 +748,7 @@ void AddCard::paintEvent(QPaintEvent*) {
     QFont f = font(); f.setPixelSize(15); f.setWeight(QFont::DemiBold);
     p.setFont(f);
     p.setPen(c.accent);
-    p.drawText(QRectF(card.left(), circle.bottom() + 14, card.width(), 24), Qt::AlignCenter, "افزودن سایت جدید");
+    p.drawText(QRectF(card.left(), circle.bottom() + 14, card.width(), 24), Qt::AlignCenter, "Add a bookmark");
     QFont sf = font(); sf.setPixelSize(12);
     p.setFont(sf);
     p.setPen(c.muted);

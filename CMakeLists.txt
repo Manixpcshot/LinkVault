@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.16)
-project(LinkVault VERSION 3.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.21)
+project(LinkVault VERSION 4.0.0 LANGUAGES CXX)
 if(WIN32)
     enable_language(RC)
 endif()
@@ -12,7 +12,7 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 
 qt_add_executable(LinkVault WIN32 MACOSX_BUNDLE
     main.cpp
-    bookmark.h theme.h autostart.h backdrop.h
+    bookmark.h theme.h autostart.h backdrop.h platform.h
     fetcher.h fetcher.cpp
     titlebar.h titlebar.cpp
     card.h card.cpp
@@ -34,6 +34,37 @@ endif()
 
 qt_add_resources(LinkVault "assets" PREFIX "/" FILES icon.png)
 target_link_libraries(LinkVault PRIVATE Qt6::Widgets Qt6::Network)
+target_compile_definitions(LinkVault PRIVATE LINKVAULT_VERSION="${PROJECT_VERSION}")
+if(APPLE)
+    set_target_properties(LinkVault PROPERTIES
+        MACOSX_BUNDLE_BUNDLE_NAME "LinkVault"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.manixpcshot.linkvault"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+    )
+endif()
+if(APPLE AND NOT IOS)
+    target_sources(LinkVault PRIVATE packaging/macos/LinkVault.icns)
+    set_source_files_properties(packaging/macos/LinkVault.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    set_target_properties(LinkVault PROPERTIES MACOSX_BUNDLE_ICON_FILE "LinkVault.icns")
+endif()
+if(ANDROID)
+    get_filename_component(qt_android_prefix "${Qt6_DIR}/../../.." ABSOLUTE)
+    set(android_package "${CMAKE_CURRENT_BINARY_DIR}/android-package")
+    file(MAKE_DIRECTORY "${android_package}/assets")
+    file(COPY packaging/android/res DESTINATION "${android_package}")
+    configure_file(THIRD-PARTY-NOTICES.md "${android_package}/assets/THIRD-PARTY-NOTICES.md" COPYONLY)
+    file(READ "${qt_android_prefix}/src/android/templates/AndroidManifest.xml" manifest)
+    string(REPLACE "<application" "<application android:icon=\"@drawable/linkvault_icon\"" manifest "${manifest}")
+    file(WRITE "${android_package}/AndroidManifest.xml" "${manifest}")
+    set_target_properties(LinkVault PROPERTIES
+        QT_ANDROID_PACKAGE_NAME "io.github.manixpcshot.linkvault"
+        QT_ANDROID_VERSION_NAME "${PROJECT_VERSION}"
+        QT_ANDROID_VERSION_CODE 40000
+        QT_ANDROID_MIN_SDK_VERSION 28
+        QT_ANDROID_PACKAGE_SOURCE_DIR "${android_package}"
+    )
+endif()
 if(WIN32)
     target_link_libraries(LinkVault PRIVATE dwmapi)   # rounded corners on Windows 11
 endif()

@@ -83,7 +83,7 @@ void FloatingPanel::popup(const QPoint& topLeft, int slideDy) {
         move(topLeft + QPoint(0, slideDy));
         show();
         m_anim->setEasingCurve(Theme::easeOut());
-        m_anim->setDuration(260);
+        m_anim->setDuration(210);
         m_anim->setStartValue(0.0);
         m_anim->setEndValue(1.0);
         m_anim->start();
@@ -102,7 +102,7 @@ void FloatingPanel::dismiss() {
     m_anim->stop();
     if (!Theme::animations()) { hide(); m_closing = false; emit dismissed(); return; }
     m_anim->setEasingCurve(Theme::easeIn());
-    m_anim->setDuration(160);
+    m_anim->setDuration(145);
     m_anim->setStartValue(windowOpacity());
     m_anim->setEndValue(0.0);
     m_dy = m_dy / 2;
@@ -133,7 +133,7 @@ void FloatingPanel::paintEvent(QPaintEvent*) {
     }
     QPainterPath shape;
     shape.addRoundedRect(card, 18, 18);
-    p.fillPath(shape, Theme::isDark() ? QColor(28, 30, 44, 250) : QColor(255, 255, 255, 252));
+    p.fillPath(shape, Theme::isBlack() ? c.card : Theme::isDark() ? QColor(28, 30, 44, 250) : QColor(255, 255, 255, 252));
     // accent glow in the corner, like the main window
     QRadialGradient g(card.topRight(), card.width() * 0.7);
     QColor a = c.accent; a.setAlpha(Theme::isDark() ? 45 : 30);
@@ -161,9 +161,9 @@ QuickAddPanel::QuickAddPanel(QWidget* parent) : FloatingPanel(parent) {
     v->setSpacing(8);
 
     auto* head = new QHBoxLayout;
-    auto* title = new QLabel("⚡  افزودن سریع");
+    auto* title = new QLabel("⚡ Quick add");
     title->setObjectName("dialogTitle");
-    auto* hint = new QLabel("Enter ذخیره  ·  Esc بستن");
+    auto* hint = new QLabel("Enter to save · Esc to close");
     hint->setObjectName("muted");
     head->addWidget(title);
     head->addStretch();
@@ -175,7 +175,7 @@ QuickAddPanel::QuickAddPanel(QWidget* parent) : FloatingPanel(parent) {
     m_url->setPlaceholderText("https://example.com");
     m_url->setLayoutDirection(Qt::LeftToRight);
     m_name = new QLineEdit;
-    m_name->setPlaceholderText("اسم (اختیاری، خالی = عنوان خود سایت)");
+    m_name->setPlaceholderText("Title (optional)");
     m_collection = new QComboBox;
     m_collection->setCursor(Qt::PointingHandCursor);
     v->addWidget(m_url);
@@ -230,7 +230,7 @@ bool QuickAddPanel::eventFilter(QObject* o, QEvent* e) {
 void QuickAddPanel::submit() {
     if (m_success > 0) return;
     const QUrl u = parseUserUrl(m_url->text());
-    if (!isWebUrl(u)) { showError("آدرس درست نیست، یه لینک معتبر وارد کن."); m_url->setFocus(); return; }
+    if (!isWebUrl(u)) { showError("Enter a valid web address."); m_url->setFocus(); return; }
     emit submitted(u.toString(), m_name->text().trimmed(), m_collection->currentData().toString());
 }
 
@@ -298,7 +298,7 @@ void QuickAddPanel::paintOverlay(QPainter& p, const QRectF& card) {
     p.setFont(f);
     p.setOpacity(qBound<qreal>(0, m_success, 1));
     p.setPen(c.text);
-    const QString line = m_savedName.isEmpty() ? QString("ذخیره شد") : QString("«%1» ذخیره شد").arg(m_savedName);
+    const QString line = m_savedName.isEmpty() ? QString("Saved") : QString("Saved “%1”").arg(m_savedName);
     p.drawText(QRectF(card.left() + 20, ctr.y() + 46, card.width() - 40, 26), Qt::AlignCenter,
                QFontMetricsF(f).elidedText(line, Qt::ElideMiddle, card.width() - 40));
     p.setOpacity(1);
@@ -355,7 +355,7 @@ protected:
         p.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing | QPainter::SmoothPixmapTransform);
         if (m_items.isEmpty()) {
             p.setPen(c.muted);
-            p.drawText(rect(), Qt::AlignCenter, QString("چیزی پیدا نشد 🤷"));
+            p.drawText(rect(), Qt::AlignCenter, QString("No results"));
             return;
         }
         // selection highlight glides between rows
@@ -465,12 +465,12 @@ CommandPalette::CommandPalette(QWidget* parent) : FloatingPanel(parent) {
     setFixedWidth(620 + 2 * kShadow);
     m_input = new QLineEdit;
     m_input->setObjectName("paletteInput");
-    m_input->setPlaceholderText("اسم سایت یا بخشی از آدرس...   (> برای دستورها)");
+    m_input->setPlaceholderText("Search by title or URL. Type > for commands.");
     m_input->installEventFilter(this);
     connect(m_input, &QLineEdit::textChanged, this, &CommandPalette::requery);
     m_list = new PaletteList;
     m_list->onClick = [this](int row) { activate(row, false); };
-    m_hint = new QLabel("↑↓ انتخاب   ·   Enter باز کردن   ·   Ctrl+Enter کپی لینک   ·   Esc بستن");
+    m_hint = new QLabel("↑↓ Select · Enter Open · Ctrl+Enter Copy · Esc Close");
     m_hint->setObjectName("muted");
     m_hint->setAlignment(Qt::AlignCenter);
     body()->addWidget(m_input);

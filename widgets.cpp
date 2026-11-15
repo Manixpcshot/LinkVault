@@ -212,7 +212,14 @@ void SearchBox::setWidths(int normal, int focused) {
     m_normal = normal; m_focused = focused;
     setFixedWidth(hasFocus() ? focused : normal);
 }
+void SearchBox::setStretchable() {
+    m_stretchable = true;
+    setMinimumWidth(0);
+    setMaximumWidth(QWIDGETSIZE_MAX);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+}
 void SearchBox::animateWidth(int to) {
+    if (m_stretchable) return;
     m_anim->stop();
     if (!Theme::animations()) { setFixedWidth(to); return; }
     m_anim->setStartValue(qreal(width()));
@@ -317,7 +324,7 @@ void Toast::paintEvent(QPaintEvent*) {
     p.setFont(f);
     p.setPen(Qt::white);
     const QRectF tr(r.left() + (aw > 0 ? aw + 18 : 18), r.top(), r.width() - (aw > 0 ? aw + 36 : 36), r.height());
-    p.drawText(tr, Qt::AlignRight | Qt::AlignVCenter,
+    p.drawText(tr, Qt::AlignLeft | Qt::AlignVCenter,
                QFontMetricsF(f).elidedText(m_text, Qt::ElideRight, tr.width()));
 }
 
@@ -363,11 +370,11 @@ protected:
         p.setRenderHint(QPainter::SmoothPixmapTransform);
         const qreal w = width(), t = m_t;
         // outgoing page: drifts a little and fades out quickly
-        p.setOpacity(qBound<qreal>(0, 1.0 - t * 1.6, 1));
-        p.drawPixmap(QPointF(-m_sign * w * 0.18 * t, 0), m_from);
-        // incoming page: slides in from 30% away and fades in
-        p.setOpacity(qBound<qreal>(0, t * 1.4, 1));
-        p.drawPixmap(QPointF(m_sign * w * 0.30 * (1.0 - t), 0), m_to);
+        const qreal travel = qMin(w * 0.10, 52.0);
+        p.setOpacity(1.0 - t);
+        p.drawPixmap(QPointF(-m_sign * travel * 0.6 * t, 0), m_from);
+        p.setOpacity(qMin<qreal>(1.0, t * 1.4));
+        p.drawPixmap(QPointF(m_sign * travel * (1.0 - t), 0), m_to);
     }
 private:
     QPixmap m_from, m_to;
@@ -398,7 +405,10 @@ void SlideStack::finishTransition() {
         a->disconnect(this);
         a->stop();
     }
-    if (m_overlay) m_overlay->deleteLater();
+    if (m_overlay) {
+        m_overlay->hide();
+        m_overlay->deleteLater();
+    }
     m_overlay = nullptr;
     for (int i = 0; i < m_pages.size(); ++i) {
         if (i == m_cur) { m_pages[i]->setGeometry(rect()); m_pages[i]->show(); }
@@ -434,7 +444,7 @@ void SlideStack::slideTo(int index) {
     m_overlay = ov;
 
     auto* an = new QVariantAnimation(this);
-    an->setDuration(460);
+    an->setDuration(260);
     an->setEasingCurve(Theme::easeOut());
     an->setStartValue(0.0);
     an->setEndValue(1.0);
@@ -506,7 +516,7 @@ void CardGrid::moveAnimated(QWidget* w, const QPoint& target) {
     if (a && a->state() == QAbstractAnimation::Running && a->endValue().toPoint() == target) return;
     if (a) a->stop();
     auto* an = new QPropertyAnimation(w, "pos", w);
-    an->setDuration(520);
+    an->setDuration(300);
     an->setEasingCurve(Theme::easeOut());
     an->setStartValue(w->pos());
     an->setEndValue(target);
@@ -599,7 +609,7 @@ void CollectionBar::relayout() {
         m_rects << QRectF(x, (height() - kChipH) / 2, w, kChipH);
         x += w + kChipGap;
     }
-    const qreal aw = fm.horizontalAdvance(QStringLiteral("+  کالکشن جدید")) + 2 * kChipPadX;
+    const qreal aw = fm.horizontalAdvance(QStringLiteral("+ New collection")) + 2 * kChipPadX;
     m_addRect = QRectF(x, (height() - kChipH) / 2, aw, kChipH);
     m_contentW = x + aw + 2;
     m_scroll = qBound<qreal>(0, m_scroll, maxScroll());
@@ -738,7 +748,7 @@ void CollectionBar::paintEvent(QPaintEvent*) {
     p.setBrush(m_hover == -2 ? QColor(c.accent.red(), c.accent.green(), c.accent.blue(), 24) : QColor(Qt::transparent));
     p.drawRoundedRect(ar.adjusted(0.5, 0.5, -0.5, -0.5), kChipH / 2, kChipH / 2);
     p.setPen(m_hover == -2 ? c.accent : c.muted);
-    p.drawText(ar, Qt::AlignCenter, QStringLiteral("+  کالکشن جدید"));
+    p.drawText(ar, Qt::AlignCenter, QStringLiteral("+ New collection"));
 }
 
 void CollectionBar::mousePressEvent(QMouseEvent* e) {

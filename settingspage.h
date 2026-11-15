@@ -15,6 +15,7 @@ struct SettingsState {
     bool autoStart = false, animations = true, minimizeOnOpen = false, useClipboard = true;
     bool mica = false, micaSupported = false;
     bool closeToTray = false;
+    bool autoStartSupported = false, traySupported = false;
     bool linkCheck = true;
     bool hotkeysSupported = false;
     QKeySequence quickAddKey, paletteKey;
@@ -34,7 +35,7 @@ public:
 
 signals:
     void backRequested();
-    void themeModeChanged(int mode);          // 0 light, 1 dark, 2 system
+    void themeModeChanged(int mode);
     void autoStartChanged(bool on);
     void animationsChanged(bool on);
     void minimizeOnOpenChanged(bool on);

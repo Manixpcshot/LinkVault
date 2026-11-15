@@ -1,5 +1,7 @@
 #include "settingspage.h"
 #include "widgets.h"
+#include "platform.h"
+#include "theme.h"
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -7,35 +9,34 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScroller>
 #include <QStyle>
 #include <QVBoxLayout>
 
-static const char* kQuickDesc = "از هر جای ویندوز، لینک کپی‌شده رو سریع ذخیره کن";
-static const char* kPaletteDesc = "پنجره‌ی جستجو و باز کردن سریع لینک‌ها از هر جای ویندوز (داخل برنامه: Ctrl+K)";
+static const char* kQuickDesc = "Save the copied link from anywhere in Windows.";
+static const char* kPaletteDesc = "Search and open links from anywhere in Windows. In LinkVault: Ctrl+K.";
 
 SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
     setObjectName("page");
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(24, 4, 12, 4);
+    const int padding = Platform::mobile ? 12 : 20;
+    root->setContentsMargins(padding, padding, padding, 4);
     root->setSpacing(16);
 
     // ---- header ----
     auto* header = new QHBoxLayout;
     header->setContentsMargins(0, 0, 12, 0);
     header->setSpacing(10);
-    auto* back = new QPushButton("→   بازگشت");
+    auto* back = new QPushButton("← Back");
     back->setObjectName("ghost");
     back->setCursor(Qt::PointingHandCursor);
-    back->setToolTip("بازگشت (Esc)");
+    back->setToolTip("Back (Esc)");
     connect(back, &QPushButton::clicked, this, &SettingsPage::backRequested);
     auto* titleBox = new QVBoxLayout;
     titleBox->setSpacing(0);
-    auto* title = new QLabel("تنظیمات");
+    auto* title = new QLabel("Settings");
     title->setObjectName("appTitle");
-    auto* sub = new QLabel("LinkVault رو همون‌جوری که دوست داری کن");
-    sub->setObjectName("muted");
     titleBox->addWidget(title);
-    titleBox->addWidget(sub);
     header->addLayout(titleBox);
     header->addStretch();
     header->addWidget(back);
@@ -47,10 +48,11 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
     scroll->setWidgetResizable(true);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scroll->viewport()->setAutoFillBackground(false);
+    if (Platform::mobile) QScroller::grabGesture(scroll->viewport(), QScroller::TouchGesture);
     auto* holder = new QWidget;
     holder->setObjectName("gridHolder");
     auto* hl = new QHBoxLayout(holder);
-    hl->setContentsMargins(0, 0, 12, 24);
+    hl->setContentsMargins(0, 0, 0, 24);
     auto* column = new QWidget;
     column->setObjectName("gridHolder");
     column->setMaximumWidth(760);
@@ -77,83 +79,88 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
 
     // ---- appearance ----
     QVBoxLayout* body = nullptr;
-    cl->addWidget(makeCard("🎨  ظاهر", &body));
-    m_theme = new SegmentedControl({"☀️  روز", "🌙  شب", "💻  سیستم"});
+    cl->addWidget(makeCard("🎨 Appearance", &body));
+    m_theme = new SegmentedControl({"Light", "Dark", "System", "Black"});
     connect(m_theme, &SegmentedControl::currentChanged, this, [this](int i) { if (!m_syncing) emit themeModeChanged(i); });
-    addRow(body, "تم برنامه", "روشن، تیره یا هماهنگ با تم ویندوز", m_theme);
-    m_micaDesc = addRow(body, "پس‌زمینه‌ی شیشه‌ای (Mica)",
-                        "رنگ‌های والپیپر ویندوز، محو و نرم، پشت برنامه دیده میشه", toggle(&m_mica, &SettingsPage::micaChanged));
-    addRow(body, "انیمیشن‌ها", "حرکت نرم کارت‌ها و صفحه‌ها. روی سیستم ضعیف می‌تونی خاموشش کنی",
+    addRow(body, "Theme", "Choose Light, Dark, Black, or match your system.", m_theme);
+    m_micaDesc = addRow(body, "Mica background",
+                        "Use blurred colors from your Windows wallpaper.", toggle(&m_mica, &SettingsPage::micaChanged));
+    addRow(body, "Animations", "Animate cards, panels, and page transitions.",
            toggle(&m_anim, &SettingsPage::animationsChanged));
 
     // ---- behaviour ----
-    cl->addWidget(makeCard("⚡  رفتار برنامه", &body));
-    addRow(body, "اجرای خودکار", "وقتی کامپیوتر روشن شد، LinkVault خودش باز بشه",
+    cl->addWidget(makeCard("⚡ Behavior", &body));
+    addRow(body, "Launch at login", "Start LinkVault when you sign in.",
            toggle(&m_auto, &SettingsPage::autoStartChanged));
-    addRow(body, "با بستن، بره توی System Tray", "برنامه بسته نمیشه و میانبرها و یادآوری‌ها کار می‌کنن",
+    addRow(body, "Close to system tray", "Keep shortcuts and reminders active in the background.",
            toggle(&m_tray, &SettingsPage::closeToTrayChanged));
-    addRow(body, "کوچک شدن بعد از باز کردن لینک", "بعد از باز کردن یه سایت، پنجره بره پایین",
-           toggle(&m_min, &SettingsPage::minimizeOnOpenChanged));
-    addRow(body, "پر کردن خودکار از کلیپ‌بورد", "اگه لینکی کپی کرده باشی، موقع افزودن خودش وارد میشه",
+    addRow(body, "Minimize after opening a link", "Hide the window after opening a link in your browser.",
+           toggle(&m_min, &SettingsPage::minimizeOnOpenChanged))->parentWidget()->setVisible(!Platform::mobile);
+    addRow(body, "Fill from clipboard", "Prefill a copied web address when adding a link.",
            toggle(&m_clip, &SettingsPage::clipboardChanged));
 
     // ---- global hotkeys ----
-    cl->addWidget(makeCard("🌍  میانبرهای سراسری", &body));
-    m_quickDesc = addRow(body, "افزودن سریع", kQuickDesc, makeKeyEditor(&m_quickKey, 1));
-    m_paletteDesc = addRow(body, "جستجوی سریع (پالت فرمان)", kPaletteDesc, makeKeyEditor(&m_paletteKey, 2));
+    auto* hotkeyCard = makeCard("🌍 Global shortcuts", &body);
+    cl->addWidget(hotkeyCard);
+    hotkeyCard->setVisible(Platform::customFrame);
+    m_quickDesc = addRow(body, "Quick add", kQuickDesc, makeKeyEditor(&m_quickKey, 1));
+    m_paletteDesc = addRow(body, "Quick search (command palette)", kPaletteDesc, makeKeyEditor(&m_paletteKey, 2));
 
     // ---- links ----
-    cl->addWidget(makeCard("🔗  سلامت لینک‌ها", &body));
-    addRow(body, "بررسی خودکار لینک‌ها", "روزی یک بار، بی‌صدا چک میشه کدوم لینک‌ها خراب شدن یا منتقل شدن",
+    cl->addWidget(makeCard("🔗 Link health", &body));
+    addRow(body, "Check links automatically", "Check for broken links and redirects once a day.",
            toggle(&m_check, &SettingsPage::linkCheckChanged));
-    auto* checkNow = button("🔍  الان بررسی کن");
+    auto* checkNow = button("🔍 Check now");
     connect(checkNow, &QPushButton::clicked, this, &SettingsPage::checkLinksNowRequested);
-    m_linkStatus = addRow(body, "بررسی دستی", QString(), checkNow);
+    m_linkStatus = addRow(body, "Manual check", QString(), checkNow);
 
     // ---- sync ----
-    cl->addWidget(makeCard("☁️  سینک بین دستگاه‌ها", &body));
+    cl->addWidget(makeCard("☁️ Folder sync", &body));
     auto* syncBtns = new QWidget;
     auto* sb = new QHBoxLayout(syncBtns);
     sb->setContentsMargins(0, 0, 0, 0);
     sb->setSpacing(8);
-    m_syncChoose = button("📁  انتخاب پوشه");
+    m_syncChoose = button("Choose folder");
     m_syncNow = button("⟳");
-    m_syncNow->setToolTip("الان سینک کن");
-    m_syncOff = button("قطع");
+    m_syncNow->setToolTip("Sync now");
+    m_syncOff = button("Disconnect");
     connect(m_syncChoose, &QPushButton::clicked, this, &SettingsPage::syncChooseRequested);
     connect(m_syncNow, &QPushButton::clicked, this, &SettingsPage::syncNowRequested);
     connect(m_syncOff, &QPushButton::clicked, this, &SettingsPage::syncDisableRequested);
     sb->addWidget(m_syncNow);
     sb->addWidget(m_syncOff);
     sb->addWidget(m_syncChoose);
-    m_syncDesc = addRow(body, "پوشه‌ی سینک",
-                        "یه پوشه داخل OneDrive / Google Drive / Dropbox انتخاب کن تا لینک‌ها روی همه‌ی سیستم‌هات یکی باشن",
+    m_syncDesc = addRow(body, "Sync folder",
+                        "Choose a shared folder in OneDrive, Google Drive, or Dropbox.",
                         syncBtns);
 
     // ---- data ----
-    cl->addWidget(makeCard("💾  داده‌ها", &body));
-    auto* folder = button("📁  باز کردن پوشه");
+    cl->addWidget(makeCard("💾 Data", &body));
+    auto* folder = button("Open folder");
     connect(folder, &QPushButton::clicked, this, &SettingsPage::openFolderRequested);
-    m_stats = addRow(body, "محل ذخیره‌سازی", QString(), folder);
-    auto* exp = button("⬆  خروجی گرفتن");
+    m_stats = addRow(body, "Data location", QString(), folder);
+    m_stats->parentWidget()->setVisible(!Platform::mobile);
+    auto* exp = button("Export");
     connect(exp, &QPushButton::clicked, this, &SettingsPage::exportRequested);
-    addRow(body, "پشتیبان‌گیری", "همه‌ی لینک‌ها توی یه فایل JSON ذخیره میشن", exp);
-    auto* imp = button("⬇  وارد کردن");
+    addRow(body, "Backup", "Save your library to a JSON file.", exp);
+    auto* imp = button("Import");
     connect(imp, &QPushButton::clicked, this, &SettingsPage::importRequested);
-    addRow(body, "وارد کردن لینک‌ها", "از فایل پشتیبان LinkVault یا بوکمارک‌های خروجی کروم / فایرفاکس (HTML)", imp);
+    addRow(body, "Import bookmarks", "Import from a LinkVault backup or a browser bookmarks HTML file.", imp);
 
     // ---- shortcuts ----
-    cl->addWidget(makeCard("⌨️  میانبرها", &body));
+    auto* shortcutCard = makeCard("⌨️ Shortcuts", &body);
+    cl->addWidget(shortcutCard);
+    shortcutCard->setVisible(!Platform::mobile);
     auto* grid = new QGridLayout;
     grid->setContentsMargins(0, 10, 0, 6);
     grid->setHorizontalSpacing(14);
     grid->setVerticalSpacing(10);
     const QList<QPair<QString, QString>> keys = {
-        {"Ctrl + N", "افزودن سایت"}, {"Ctrl + F", "جستجو"},
-        {"Ctrl + K", "پالت فرمان"}, {"Enter", "باز کردن اولین نتیجه"},
-        {"Esc", "پاک کردن جستجو / بازگشت"}, {"Ctrl + ,", "تنظیمات"},
-        {"Ctrl + Z", "برگردوندن حذف"}, {"F11", "تمام صفحه"},
-        {"کلیک راست", "منوی کارت"}, {"کشیدن کارت", "انتقال به کالکشن"},
+        {"Ctrl + N", "Add link"}, {"Ctrl + F", "Search"},
+        {"Ctrl + K", "Command palette"}, {"Enter", "Open the first result"},
+        {"Esc", "Clear search or go back"}, {"Ctrl + ,", "Settings"},
+        {"Ctrl + Z", "Undo delete"}, {"F11", "Full screen"},
+        {"Right-click", "Bookmark menu"}, {"Drag a card", "Move to collection"},
     };
     for (int i = 0; i < keys.size(); ++i) {
         auto* k = new QLabel(keys[i].first);
@@ -170,7 +177,7 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
     body->addLayout(grid);
 
     // ---- about ----
-    auto* about = new QLabel("LinkVault 3.0  ·  ساخته شده با C++ و Qt 6");
+    auto* about = new QLabel(QString("LinkVault %1 · C++ and Qt 6").arg(LINKVAULT_VERSION));
     about->setObjectName("muted");
     about->setAlignment(Qt::AlignCenter);
     cl->addSpacing(4);
@@ -190,7 +197,7 @@ QWidget* SettingsPage::makeKeyEditor(QKeySequenceEdit** edit, int which) {
     e->setMaximumSequenceLength(1);
 #endif
     auto* clear = new QPushButton("✕");
-    clear->setToolTip("غیرفعال کردن این میانبر");
+    clear->setToolTip("Clear this shortcut");
     clear->setCursor(Qt::PointingHandCursor);
     clear->setFixedWidth(40);
     auto emitChange = [this, e, which] {
@@ -211,7 +218,8 @@ QFrame* SettingsPage::makeCard(const QString& title, QVBoxLayout** body) {
     auto* f = new QFrame;
     f->setObjectName("settingsCard");
     auto* v = new QVBoxLayout(f);
-    v->setContentsMargins(22, 18, 22, 10);
+    const int margin = Platform::mobile ? 12 : 22;
+    v->setContentsMargins(margin, 18, margin, 10);
     v->setSpacing(0);
     auto* t = new QLabel(title);
     t->setObjectName("cardTitle");
@@ -229,20 +237,21 @@ QLabel* SettingsPage::addRow(QVBoxLayout* body, const QString& title, const QStr
         body->addWidget(sep);
     }
     auto* row = new QWidget;
-    auto* h = new QHBoxLayout(row);
+    auto* h = new QBoxLayout(Platform::mobile ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight, row);
     h->setContentsMargins(0, 12, 0, 12);
-    h->setSpacing(18);
+    h->setSpacing(Platform::mobile ? 8 : 18);
     auto* tv = new QVBoxLayout;
     tv->setSpacing(3);
     auto* t = new QLabel(title);
     t->setObjectName("rowTitle");
+    t->setWordWrap(true);
     auto* d = new QLabel(desc);
     d->setObjectName("muted");
     d->setWordWrap(true);
     tv->addWidget(t);
     tv->addWidget(d);
     h->addLayout(tv, 1);
-    h->addWidget(control, 0, Qt::AlignVCenter);
+    h->addWidget(control, 0, Platform::mobile ? Qt::AlignLeft : Qt::AlignVCenter);
     body->addWidget(row);
     return d;
 }
@@ -251,19 +260,22 @@ void SettingsPage::sync(const SettingsState& s) {
     m_syncing = true;
     m_theme->setCurrent(s.themeMode, false);
     m_auto->setChecked(s.autoStart);
+    m_auto->parentWidget()->setVisible(s.autoStartSupported);
     m_anim->setChecked(s.animations);
     m_min->setChecked(s.minimizeOnOpen);
     m_clip->setChecked(s.useClipboard);
     m_mica->setChecked(s.mica && s.micaSupported);
-    m_mica->setEnabled(s.micaSupported);
-    if (!s.micaSupported) m_micaDesc->setText("فقط روی ویندوز، وقتی والپیپر تصویری داری در دسترسه");
+    m_micaDesc->parentWidget()->setVisible(s.micaSupported);
+    m_micaDesc->setText(s.themeMode == Theme::Black ? "The Black theme uses a solid black background." : "Use blurred colors from your Windows wallpaper.");
+    m_mica->setEnabled(s.micaSupported && s.themeMode != Theme::Black);
     m_tray->setChecked(s.closeToTray);
+    m_tray->parentWidget()->setVisible(s.traySupported);
     m_check->setChecked(s.linkCheck);
     m_quickKey->setKeySequence(s.quickAddKey);
     m_paletteKey->setKeySequence(s.paletteKey);
     m_quickKey->setEnabled(s.hotkeysSupported);
     m_paletteKey->setEnabled(s.hotkeysSupported);
-    if (m_stats) m_stats->setText(QString("%1 لینک ذخیره شده  ·  %2 سنجاق‌شده").arg(s.total).arg(s.pinned));
+    if (m_stats) m_stats->setText(QString("Saved: %1 · Pinned: %2").arg(s.total).arg(s.pinned));
     setLinkStatus(s.linkStatus);
     setSyncStatus(s.syncFolder, s.syncStatus);
     m_syncing = false;
@@ -279,14 +291,14 @@ void SettingsPage::setHotkeyError(int which, const QString& error) {
 }
 
 void SettingsPage::setLinkStatus(const QString& text) {
-    if (m_linkStatus) m_linkStatus->setText(text.isEmpty() ? QString("همه‌ی لینک‌ها رو همین الان چک کن") : text);
+    if (m_linkStatus) m_linkStatus->setText(text.isEmpty() ? QString("Check all links for issues.") : text);
 }
 
 void SettingsPage::setSyncStatus(const QString& folder, const QString& status) {
     const bool on = !folder.isEmpty();
     m_syncOff->setVisible(on);
     m_syncNow->setVisible(on);
-    m_syncChoose->setText(on ? "📁  تغییر پوشه" : "📁  انتخاب پوشه");
+    m_syncChoose->setText(on ? "Change folder" : "Choose folder");
     if (on) m_syncDesc->setText(QString("%1\n%2").arg(folder, status));
-    else m_syncDesc->setText("یه پوشه داخل OneDrive / Google Drive / Dropbox انتخاب کن تا لینک‌ها روی همه‌ی سیستم‌هات یکی باشن");
+    else m_syncDesc->setText("Choose a shared folder in OneDrive, Google Drive, or Dropbox.");
 }

@@ -48,7 +48,7 @@ class QuickAddPanel : public FloatingPanel {
     Q_OBJECT
 public:
     explicit QuickAddPanel(QWidget* parent = nullptr);
-    // collections: (id, label) pairs; first entry should be ("", "بدون کالکشن")
+    // collections: (id, label) pairs; first entry should be ("", "No collection")
     void open(const QString& url, const QList<QPair<QString, QString>>& collections, const QString& currentCollection);
     void showSaved(const QString& name);
     void showError(const QString& text);

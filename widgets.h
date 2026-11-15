@@ -63,6 +63,7 @@ public:
     explicit SearchBox(QWidget* parent = nullptr);
     void setDark(bool dark);
     void setWidths(int normal, int focused);
+    void setStretchable();
 protected:
     void focusInEvent(QFocusEvent*) override;
     void focusOutEvent(QFocusEvent*) override;
@@ -71,6 +72,7 @@ private:
     QAction* m_icon = nullptr;
     QVariantAnimation* m_anim;
     int m_normal = 280, m_focused = 380;
+    bool m_stretchable = false;
 };
 
 // Bottom snackbar with optional action button (e.g. undo) and countdown bar

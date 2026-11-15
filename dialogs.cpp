@@ -1,4 +1,5 @@
 #include "dialogs.h"
+#include "platform.h"
 #include <QDateTimeEdit>
 #include <QGridLayout>
 #include <QLineEdit>
@@ -24,7 +25,7 @@ bool isWebUrl(const QUrl& u) {
 BookmarkDialog::BookmarkDialog(QWidget* parent, const QString& title, const QString& url, const QString& name)
     : QDialog(parent) {
     setWindowTitle(title);
-    setMinimumWidth(480);
+    setMinimumWidth(Platform::mobile ? 260 : 480);
 
     auto* lay = new QVBoxLayout(this);
     lay->setContentsMargins(26, 22, 26, 20);
@@ -34,19 +35,19 @@ BookmarkDialog::BookmarkDialog(QWidget* parent, const QString& title, const QStr
     lay->addWidget(h);
     lay->addSpacing(8);
 
-    auto* l1 = new QLabel("آدرس سایت یا صفحه"); l1->setObjectName("muted");
+    auto* l1 = new QLabel("Page URL"); l1->setObjectName("muted");
     m_url = new QLineEdit(url);
     m_url->setPlaceholderText("https://example.com");
     m_url->setLayoutDirection(Qt::LeftToRight);
     lay->addWidget(l1); lay->addWidget(m_url);
     lay->addSpacing(6);
 
-    auto* l2 = new QLabel("اسم (اختیاری)"); l2->setObjectName("muted");
+    auto* l2 = new QLabel("Title (optional)"); l2->setObjectName("muted");
     m_name = new QLineEdit(name);
-    m_name->setPlaceholderText("مثلاً: پروژه فلان");
+    m_name->setPlaceholderText("Example: Project notes");
     lay->addWidget(l2); lay->addWidget(m_name);
 
-    auto* hint = new QLabel("اگه اسم رو خالی بذاری، عنوان خود سایت رو می‌ذارم. عکس سایت هم خودکار گرفته میشه.");
+    auto* hint = new QLabel("Leave the title blank to use the page title. LinkVault also tries to fetch a preview.");
     hint->setObjectName("muted"); hint->setWordWrap(true);
     lay->addWidget(hint);
 
@@ -56,8 +57,8 @@ BookmarkDialog::BookmarkDialog(QWidget* parent, const QString& title, const QStr
 
     auto* btns = new QHBoxLayout;
     btns->addStretch();
-    auto* cancel = new QPushButton("انصراف");
-    auto* ok = new QPushButton("ذخیره"); ok->setObjectName("primary"); ok->setDefault(true);
+    auto* cancel = new QPushButton("Cancel");
+    auto* ok = new QPushButton("Save"); ok->setObjectName("primary"); ok->setDefault(true);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
     connect(ok, &QPushButton::clicked, this, &BookmarkDialog::accept);
     btns->addWidget(cancel); btns->addWidget(ok);
@@ -71,7 +72,7 @@ QString BookmarkDialog::name() const { return m_name->text().trimmed(); }
 
 void BookmarkDialog::accept() {
     if (!isWebUrl(parseUserUrl(m_url->text()))) {
-        m_error->setText("آدرس درست نیست، یه لینک معتبر وارد کن.");
+        m_error->setText("Enter a valid web address.");
         m_error->show();
         m_url->setFocus();
         return;
@@ -84,7 +85,7 @@ void BookmarkDialog::accept() {
 CollectionDialog::CollectionDialog(QWidget* parent, const QString& title, const QString& name, const QString& emoji)
     : QDialog(parent), m_emoji(emoji.isEmpty() ? QStringLiteral("📁") : emoji) {
     setWindowTitle(title);
-    setMinimumWidth(440);
+    setMinimumWidth(Platform::mobile ? 260 : 440);
     auto* lay = new QVBoxLayout(this);
     lay->setContentsMargins(26, 22, 26, 20);
     lay->setSpacing(8);
@@ -93,19 +94,20 @@ CollectionDialog::CollectionDialog(QWidget* parent, const QString& title, const 
     lay->addWidget(h);
     lay->addSpacing(8);
 
-    auto* l1 = new QLabel("اسم کالکشن"); l1->setObjectName("muted");
+    auto* l1 = new QLabel("Collection name"); l1->setObjectName("muted");
     m_name = new QLineEdit(name);
-    m_name->setPlaceholderText("مثلاً: کار، یادگیری، پروژه فلان");
+    m_name->setPlaceholderText("Example: Work, Reading, Design");
     m_name->setMaxLength(40);
     lay->addWidget(l1); lay->addWidget(m_name);
     lay->addSpacing(6);
 
-    auto* l2 = new QLabel("آیکن"); l2->setObjectName("muted");
+    auto* l2 = new QLabel("Icon"); l2->setObjectName("muted");
     lay->addWidget(l2);
     auto* grid = new QGridLayout;
     grid->setSpacing(6);
     const QStringList emojis = {"📁", "💼", "📚", "🎓", "💡", "🛠", "🎨", "🎮", "🎬", "🎵", "🛒", "✈️",
                                 "💰", "📰", "🧪", "❤️", "⭐", "🔥", "🚀", "🧠", "🏠", "⚽", "🍔", "📌"};
+    const int columns = Platform::mobile ? 5 : 8;
     for (int i = 0; i < emojis.size(); ++i) {
         auto* b = new QPushButton(emojis[i]);
         b->setObjectName("emojiBtn");
@@ -118,7 +120,7 @@ CollectionDialog::CollectionDialog(QWidget* parent, const QString& title, const 
             for (auto* o : std::as_const(m_emojiBtns)) o->setChecked(o == b);
         });
         m_emojiBtns << b;
-        grid->addWidget(b, i / 8, i % 8);
+        grid->addWidget(b, i / columns, i % columns);
     }
     lay->addLayout(grid);
 
@@ -128,8 +130,8 @@ CollectionDialog::CollectionDialog(QWidget* parent, const QString& title, const 
 
     auto* btns = new QHBoxLayout;
     btns->addStretch();
-    auto* cancel = new QPushButton("انصراف");
-    auto* ok = new QPushButton("ذخیره"); ok->setObjectName("primary"); ok->setDefault(true);
+    auto* cancel = new QPushButton("Cancel");
+    auto* ok = new QPushButton("Save"); ok->setObjectName("primary"); ok->setDefault(true);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
     connect(ok, &QPushButton::clicked, this, &CollectionDialog::accept);
     btns->addWidget(cancel); btns->addWidget(ok);
@@ -141,7 +143,7 @@ QString CollectionDialog::name() const { return m_name->text().simplified(); }
 
 void CollectionDialog::accept() {
     if (name().isEmpty()) {
-        m_error->setText("یه اسم براش بنویس.");
+        m_error->setText("Enter a collection name.");
         m_error->show();
         m_name->setFocus();
         return;
@@ -152,12 +154,13 @@ void CollectionDialog::accept() {
 // ============================== ReminderDialog ==============================
 
 ReminderDialog::ReminderDialog(QWidget* parent, const QDateTime& initial) : QDialog(parent) {
-    setWindowTitle("یادآوری");
-    setMinimumWidth(380);
+    setWindowTitle("Reminder");
+    setMinimumWidth(Platform::mobile ? 260 : 380);
     auto* lay = new QVBoxLayout(this);
     lay->setContentsMargins(26, 22, 26, 20);
     lay->setSpacing(8);
-    auto* h = new QLabel("⏰  کِی یادت بندازم؟"); h->setObjectName("dialogTitle");
+    auto* h = new QLabel("⏰ When should LinkVault remind you?"); h->setObjectName("dialogTitle");
+    h->setWordWrap(true);
     lay->addWidget(h);
     lay->addSpacing(8);
     m_edit = new QDateTimeEdit(initial);
@@ -169,8 +172,8 @@ ReminderDialog::ReminderDialog(QWidget* parent, const QDateTime& initial) : QDia
     lay->addSpacing(10);
     auto* btns = new QHBoxLayout;
     btns->addStretch();
-    auto* cancel = new QPushButton("انصراف");
-    auto* ok = new QPushButton("ثبت یادآوری"); ok->setObjectName("primary"); ok->setDefault(true);
+    auto* cancel = new QPushButton("Cancel");
+    auto* ok = new QPushButton("Set reminder"); ok->setObjectName("primary"); ok->setDefault(true);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     btns->addWidget(cancel); btns->addWidget(ok);

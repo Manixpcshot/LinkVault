@@ -27,7 +27,7 @@ WindowButton::WindowButton(Kind kind, QWidget* parent) : QAbstractButton(parent)
     setFixedSize(sizeHint());
     setCursor(Qt::ArrowCursor);
     setFocusPolicy(Qt::NoFocus);
-    setToolTip(kind == Minimize ? "کوچک کردن" : kind == Maximize ? "بزرگ کردن" : "بستن");
+    setToolTip(kind == Minimize ? "Minimize" : kind == Maximize ? "Maximize" : "Close");
     m_anim = new QVariantAnimation(this);
     m_anim->setDuration(180);
     m_anim->setEasingCurve(QEasingCurve::OutCubic);
@@ -138,7 +138,7 @@ void TitleBar::setDark(bool d) { m_min->setDark(d); m_max->setDark(d); m_close->
 
 void TitleBar::setMaximized(bool m) {
     m_max->setRestore(m);
-    m_max->setToolTip(m ? "برگرداندن اندازه" : "بزرگ کردن");
+    m_max->setToolTip(m ? "Restore" : "Maximize");
 }
 
 QRect TitleBar::maxButtonRect() const {

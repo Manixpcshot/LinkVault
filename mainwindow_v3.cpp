@@ -2,6 +2,7 @@
 // global hotkeys + Quick Add + Command Palette, Mica-style material and folder sync.
 #include "mainwindow.h"
 #include "autostart.h"
+#include "platform.h"
 #include "backdrop.h"
 #include "card.h"
 #include "dialogs.h"
@@ -105,6 +106,8 @@ SettingsState MainWindow::settingsState() const {
     SettingsState s;
     s.themeMode = m_themeMode;
     s.autoStart = AutoStart::isEnabled();
+    s.autoStartSupported = AutoStart::supported();
+    s.traySupported = m_tray != nullptr;
     s.animations = Theme::animations();
     s.minimizeOnOpen = m_minimizeOnOpen;
     s.useClipboard = m_useClipboard;
@@ -118,7 +121,7 @@ SettingsState MainWindow::settingsState() const {
     s.syncFolder = m_sync ? m_sync->folder() : QString();
     s.syncStatus = syncStatusText();
     if (m_checker && m_checker->isBusy())
-        s.linkStatus = QString("در حال بررسی... %1 لینک مونده").arg(m_checker->pending());
+        s.linkStatus = QString("Checking… %1 remaining").arg(m_checker->pending());
     s.total = int(m_items.size());
     for (const auto& b : m_items) s.pinned += b.pinned ? 1 : 0;
     return s;
@@ -158,7 +161,7 @@ void MainWindow::refreshCollections() {
     QHash<QString, int> counts;
     for (const auto& b : std::as_const(m_items)) counts[b.collection]++;
     QList<CollectionBar::Chip> chips;
-    chips << CollectionBar::Chip{QString(), QString("🗂  همه"), QColor(), int(m_items.size())};
+    chips << CollectionBar::Chip{QString(), QString("🗂 All"), QColor(), int(m_items.size())};
     for (const auto& c : std::as_const(m_collections))
         chips << CollectionBar::Chip{c.id, (c.emoji + "  " + c.name).trimmed(), collectionColor(c.id), counts.value(c.id)};
     m_colBar->setChips(chips);
@@ -167,7 +170,7 @@ void MainWindow::refreshCollections() {
 
 void MainWindow::newCollection(const QString& assignBookmark) {
     if (!isVisible()) bringToFront();
-    CollectionDialog d(this, "کالکشن جدید");
+    CollectionDialog d(this, "New collection");
     if (d.exec() != QDialog::Accepted) return;
     Collection c;
     c.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -180,14 +183,14 @@ void MainWindow::newCollection(const QString& assignBookmark) {
     } else {
         persist();
         refreshCollections();
-        showToast(QString("✓  کالکشن «%1» ساخته شد. کارت‌ها رو بکش روش").arg(c.name), 3200);
+        showToast(QString("✓ Created “%1”. Drag bookmarks into it.").arg(c.name), 3200);
     }
 }
 
 void MainWindow::editCollection(const QString& id) {
     const int ci = collectionIndex(id);
     if (ci < 0) return;
-    CollectionDialog d(this, "ویرایش کالکشن", m_collections[ci].name, m_collections[ci].emoji);
+    CollectionDialog d(this, "Edit collection", m_collections[ci].name, m_collections[ci].emoji);
     if (d.exec() != QDialog::Accepted) return;
     const int cj = collectionIndex(id);
     if (cj < 0) return;
@@ -203,8 +206,8 @@ void MainWindow::deleteCollection(const QString& id) {
     const int ci = collectionIndex(id);
     if (ci < 0) return;
     const QString name = m_collections[ci].name;
-    const auto answer = QMessageBox::question(this, "حذف کالکشن",
-        QString("کالکشن «%1» حذف بشه؟\nلینک‌های داخلش پاک نمیشن، فقط بدون کالکشن میشن.").arg(name));
+    const auto answer = QMessageBox::question(this, "Delete collection",
+        QString("Delete “%1”?\nIts bookmarks will stay in your library.").arg(name));
     if (answer != QMessageBox::Yes) return;
     const int cj = collectionIndex(id);
     if (cj < 0) return;
@@ -218,7 +221,7 @@ void MainWindow::deleteCollection(const QString& id) {
     persist();
     refreshCollections();
     refresh(true);
-    showToast(QString("کالکشن «%1» حذف شد").arg(name));
+    showToast(QString("Deleted collection “%1”").arg(name));
 }
 
 void MainWindow::moveToCollection(const QString& bookmarkId, const QString& collectionId) {
@@ -230,22 +233,22 @@ void MainWindow::moveToCollection(const QString& bookmarkId, const QString& coll
     persist();
     refreshCollections();
     refresh(true);
-    if (target.isEmpty()) showToast(QString("«%1» از کالکشن بیرون اومد").arg(m_items[i].name));
-    else showToast(QString("📁  «%1» رفت توی %2").arg(m_items[i].name, collectionLabel(target)));
+    if (target.isEmpty()) showToast(QString("Removed “%1” from its collection").arg(m_items[i].name));
+    else showToast(QString("📁 Moved “%1” to %2").arg(m_items[i].name, collectionLabel(target)));
 }
 
 void MainWindow::showCollectionMenu(const QString& id, const QPoint& globalPos) {
     const int ci = collectionIndex(id);
     if (ci < 0) return;
     QMenu m(this);
-    QAction* edit = m.addAction("✏️  تغییر اسم و آیکن");
-    QMenu* colors = m.addMenu("🎨  رنگ");
-    QAction* autoColor = colors->addAction("✨  خودکار (رنگ سایت‌ها)");
+    QAction* edit = m.addAction("✏️ Change name and icon");
+    QMenu* colors = m.addMenu("🎨 Color");
+    QAction* autoColor = colors->addAction("✨ Automatic (site colors)");
     autoColor->setCheckable(true);
     autoColor->setChecked(m_collections[ci].color.isEmpty());
     const QList<QPair<QString, QString>> presets = {
-        {"#6C5CE7", "بنفش"}, {"#3B82F6", "آبی"}, {"#14B8A6", "فیروزه‌ای"}, {"#22C55E", "سبز"},
-        {"#F59E0B", "زرد"}, {"#F97316", "نارنجی"}, {"#EF4444", "قرمز"}, {"#EC4899", "صورتی"}};
+        {"#6C5CE7", "Purple"}, {"#3B82F6", "Blue"}, {"#14B8A6", "Teal"}, {"#22C55E", "Green"},
+        {"#F59E0B", "Yellow"}, {"#F97316", "Orange"}, {"#EF4444", "Red"}, {"#EC4899", "Pink"}};
     QList<QAction*> colorActs;
     for (const auto& pr : presets) {
         QPixmap dot(16, 16);
@@ -259,7 +262,7 @@ void MainWindow::showCollectionMenu(const QString& id, const QPoint& globalPos) 
         colorActs << a;
     }
     m.addSeparator();
-    QAction* del = m.addAction("🗑  حذف کالکشن");
+    QAction* del = m.addAction("🗑 Delete collection");
     QAction* act = m.exec(globalPos);
     if (!act) return;
     if (act == edit) { editCollection(id); return; }
@@ -282,8 +285,8 @@ void MainWindow::extendCardMenu(QMenu& menu, const QString& id) {
     const Bookmark& b = m_items[i];
 
     // ---- move to collection ----
-    QMenu* mv = menu.addMenu("📁  انتقال به کالکشن");
-    QAction* none = mv->addAction("بدون کالکشن");
+    QMenu* mv = menu.addMenu("📁 Move to collection");
+    QAction* none = mv->addAction("No collection");
     none->setCheckable(true);
     none->setChecked(b.collection.isEmpty());
     connect(none, &QAction::triggered, this, [this, id] { later(this, [this, id] { moveToCollection(id, {}); }); });
@@ -296,23 +299,23 @@ void MainWindow::extendCardMenu(QMenu& menu, const QString& id) {
         connect(a, &QAction::triggered, this, [this, id, cid] { later(this, [this, id, cid] { moveToCollection(id, cid); }); });
     }
     mv->addSeparator();
-    QAction* fresh = mv->addAction("+  کالکشن جدید...");
+    QAction* fresh = mv->addAction("+ New collection…");
     connect(fresh, &QAction::triggered, this, [this, id] { later(this, [this, id] { newCollection(id); }); });
 
     // ---- read later ----
-    QMenu* rm = menu.addMenu(b.remindAt > 0 ? "⏰  یادآوری (تنظیم شده)" : "⏰  بعداً بخون (یادآوری)");
+    QMenu* rm = menu.addMenu(b.remindAt > 0 ? "⏰ Reminder set" : "⏰ Read later");
     const QDateTime now = QDateTime::currentDateTime();
     auto addWhen = [&](const QString& text, const QDateTime& when) {
         QAction* a = rm->addAction(text);
         const qint64 t = when.toSecsSinceEpoch();
         connect(a, &QAction::triggered, this, [this, id, t] { later(this, [this, id, t] { setReminder(id, t); }); });
     };
-    addWhen("یک ساعت دیگه", now.addSecs(3600));
-    if (now.time().hour() < 19) addWhen("امشب ساعت ۲۰", QDateTime(now.date(), QTime(20, 0)));
-    addWhen("فردا ساعت ۹ صبح", QDateTime(now.date().addDays(1), QTime(9, 0)));
-    addWhen("آخر هفته (جمعه ساعت ۱۰)", QDateTime(now.date().addDays((5 - now.date().dayOfWeek() + 7) % 7 == 0 ? 7
+    addWhen("In one hour", now.addSecs(3600));
+    if (now.time().hour() < 19) addWhen("Tonight at 8 PM", QDateTime(now.date(), QTime(20, 0)));
+    addWhen("Tomorrow at 9 AM", QDateTime(now.date().addDays(1), QTime(9, 0)));
+    addWhen("Friday at 10 AM", QDateTime(now.date().addDays((5 - now.date().dayOfWeek() + 7) % 7 == 0 ? 7
                                          : (5 - now.date().dayOfWeek() + 7) % 7), QTime(10, 0)));
-    QAction* custom = rm->addAction("زمان دلخواه...");
+    QAction* custom = rm->addAction("Choose a time…");
     connect(custom, &QAction::triggered, this, [this, id] {
         later(this, [this, id] {
             ReminderDialog d(this, QDateTime::currentDateTime().addSecs(2 * 3600));
@@ -321,13 +324,13 @@ void MainWindow::extendCardMenu(QMenu& menu, const QString& id) {
     });
     if (b.remindAt > 0) {
         rm->addSeparator();
-        QAction* cancel = rm->addAction("✕  لغو یادآوری");
+        QAction* cancel = rm->addAction("✕ Cancel reminder");
         connect(cancel, &QAction::triggered, this, [this, id] { later(this, [this, id] { setReminder(id, 0); }); });
     }
 
     // ---- link health ----
     if (b.health == HealthRedirect && !b.redirectTo.isEmpty()) {
-        QAction* fix = menu.addAction("↪  به‌روزرسانی آدرس به مقصد جدید");
+        QAction* fix = menu.addAction("↪ Use the new address");
         fix->setToolTip(b.redirectTo);
         connect(fix, &QAction::triggered, this, [this, id] {
             later(this, [this, id] {
@@ -340,12 +343,12 @@ void MainWindow::extendCardMenu(QMenu& menu, const QString& id) {
                 if (auto* c = m_cards.value(id)) c->setBookmark(m_items[j]);
                 refresh(true);
                 startFetch(id);
-                showToast("✓  آدرس به‌روز شد");
+                showToast("✓ Address updated");
             });
         });
     }
     if (b.health == HealthBroken || b.health == HealthRedirect) {
-        QAction* ignore = menu.addAction("✓  این هشدار رو نادیده بگیر");
+        QAction* ignore = menu.addAction("✓ Dismiss this warning");
         connect(ignore, &QAction::triggered, this, [this, id] {
             later(this, [this, id] {
                 const int j = indexOf(id);
@@ -359,7 +362,7 @@ void MainWindow::extendCardMenu(QMenu& menu, const QString& id) {
             });
         });
     }
-    QAction* checkOne = menu.addAction("🔍  بررسی سلامت این لینک");
+    QAction* checkOne = menu.addAction("🔍 Check this link");
     connect(checkOne, &QAction::triggered, this, [this, id] {
         later(this, [this, id] {
             const int j = indexOf(id);
@@ -381,11 +384,11 @@ void MainWindow::checkLinks(bool force) {
     for (const auto& b : std::as_const(m_items)) {
         if (force || now - b.checkedAt > 86400) { m_checker->enqueue(b.id, QUrl(b.url)); ++n; }
     }
-    if (n == 0) { if (force) showToast("لینکی برای بررسی نیست"); return; }
+    if (n == 0) { if (force) showToast("There are no links to check."); return; }
     if (force) {
         m_checkManual = true;
-        showToast(QString("🔍  در حال بررسی %1 لینک...").arg(n), 2500);
-        m_settings->setLinkStatus(QString("در حال بررسی %1 لینک...").arg(n));
+        showToast(QString("🔍 Checking links: %1…").arg(n), 2500);
+        m_settings->setLinkStatus(QString("Checking links: %1…").arg(n));
     }
 }
 
@@ -401,7 +404,7 @@ void MainWindow::onLinkChecked(const QString& id, int health, const QString& red
     if (b.health == HealthBroken || b.health == HealthRedirect) ++m_checkFound;
     if (auto* c = m_cards.value(id)) c->setBookmark(b);
     if (m_checker->pending() % 10 == 0 && m_checker->isBusy())
-        m_settings->setLinkStatus(QString("در حال بررسی... %1 لینک مونده").arg(m_checker->pending()));
+        m_settings->setLinkStatus(QString("Checking… %1 remaining").arg(m_checker->pending()));
 }
 
 // ============================== reminders ==============================
@@ -413,10 +416,10 @@ void MainWindow::setReminder(const QString& id, qint64 when) {
     persist();
     if (auto* c = m_cards.value(id)) c->setBookmark(m_items[i]);
     if (when > 0)
-        showToast(QString("⏰  یادآوری برای %1 تنظیم شد")
+        showToast(QString("⏰ Reminder set for %1")
                   .arg(QDateTime::fromSecsSinceEpoch(when).toString("yyyy/MM/dd  HH:mm")), 3000);
     else
-        showToast("یادآوری لغو شد");
+        showToast("Reminder canceled");
 }
 
 void MainWindow::checkReminders() {
@@ -430,11 +433,11 @@ void MainWindow::checkReminders() {
         QString host = QUrl(b.url).host();
         if (host.startsWith("www.")) host = host.mid(4);
         if (m_tray && m_tray->isVisible() && QSystemTrayIcon::supportsMessages()) {
-            m_tray->showMessage("⏰  وقت خوندنه!", b.name + "\n" + host + "\n(برای باز کردن کلیک کن)",
+            m_tray->showMessage("⏰ Time to read", b.name + "\n" + host + "\n(Select to open)",
                                 QSystemTrayIcon::Information, 12000);
         } else {
             bringToFront();
-            showToast(QString("⏰  یادآوری: %1").arg(b.name), 6000);
+            showToast(QString("⏰ Reminder: %1").arg(b.name), 6000);
         }
         if (auto* c = m_cards.value(b.id)) c->setBookmark(b);
     }
@@ -448,11 +451,11 @@ void MainWindow::setupTray() {
     m_tray = new QSystemTrayIcon(QIcon(":/icon.png"), this);
     m_tray->setToolTip("LinkVault");
     m_trayMenu = new QMenu(this);
-    m_trayMenu->addAction("🔖  باز کردن LinkVault", this, [this] { bringToFront(); });
-    m_trayMenu->addAction("⚡  افزودن سریع", this, [this] { showQuickAdd(); });
-    m_trayMenu->addAction("🔍  جستجوی سریع", this, [this] { showPalette(); });
+    m_trayMenu->addAction("🔖 Open LinkVault", this, [this] { bringToFront(); });
+    m_trayMenu->addAction("⚡ Quick add", this, [this] { showQuickAdd(); });
+    m_trayMenu->addAction("🔍 Quick search", this, [this] { showPalette(); });
     m_trayMenu->addSeparator();
-    m_trayMenu->addAction("⏻  خروج", this, [this] { quitApp(); });
+    m_trayMenu->addAction("⏻ Quit", this, [this] { quitApp(); });
     m_tray->setContextMenu(m_trayMenu);
     connect(m_tray, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason r) {
         if (r == QSystemTrayIcon::Trigger || r == QSystemTrayIcon::DoubleClick) bringToFront();
@@ -479,17 +482,17 @@ void MainWindow::applyHotkeys(bool report) {
     if (!GlobalHotkeys::isSupported()) return;
     const bool okQ = m_hotkeys->setHotkey(GlobalHotkeys::QuickAdd, m_quickKey);
     const bool okP = m_hotkeys->setHotkey(GlobalHotkeys::Palette, m_paletteKey);
-    const QString err = "این میانبر آزاد نیست (یا یه برنامه‌ی دیگه گرفتتش). یه ترکیب دیگه با Ctrl/Alt امتحان کن";
+    const QString err = "This shortcut is in use. Try another combination using Ctrl or Alt.";
     m_settings->setHotkeyError(1, okQ ? QString() : err);
     m_settings->setHotkeyError(2, okP ? QString() : err);
-    if (report && okQ && okP) showToast("✓  میانبر ثبت شد");
+    if (report && okQ && okP) showToast("✓ Shortcut saved");
 }
 
 void MainWindow::showQuickAdd() {
     if (m_palette->isVisible()) m_palette->dismiss();
     QString clip = QApplication::clipboard()->text().trimmed();
     if (!(clip.startsWith("http") || clip.startsWith("www.")) || clip.contains('\n') || clip.size() > 2000) clip.clear();
-    QList<QPair<QString, QString>> cols{{QString(), QString("📂  بدون کالکشن")}};
+    QList<QPair<QString, QString>> cols{{QString(), QString("📂 No collection")}};
     for (const auto& c : std::as_const(m_collections)) cols << qMakePair(c.id, (c.emoji + "  " + c.name).trimmed());
     m_quickAdd->open(clip, cols, m_collectionFilter);
 }
@@ -505,30 +508,34 @@ QList<PaletteItem> MainWindow::paletteQuery(const QString& text) {
     if (text.startsWith('>')) {
         struct Cmd { const char* key; const char* glyph; const char* title; const char* sub; };
         static const Cmd cmds[] = {
-            {"add", "+", "افزودن سایت", "Ctrl+N"},
-            {"quick", "⚡", "افزودن سریع از کلیپ‌بورد", ""},
-            {"collection", "📁", "کالکشن جدید", ""},
-            {"settings", "⚙", "تنظیمات", "Ctrl+,"},
-            {"light", "☀️", "تم روز", ""},
-            {"dark", "🌙", "تم شب", ""},
-            {"system", "💻", "تم هماهنگ با سیستم", ""},
-            {"mica", "🪟", "روشن / خاموش کردن پس‌زمینه‌ی شیشه‌ای", ""},
-            {"check", "🔍", "بررسی سلامت همه‌ی لینک‌ها", ""},
-            {"problems", "⚠️", "نمایش لینک‌های مشکل‌دار", ""},
-            {"sync", "☁️", "سینک الان", ""},
-            {"export", "⬆", "خروجی گرفتن (پشتیبان)", ""},
-            {"folder", "📂", "باز کردن پوشه‌ی داده‌ها", ""},
-            {"quit", "⏻", "خروج از برنامه", ""},
+            {"add", "+", "Add link", "Ctrl+N"},
+            {"quick", "⚡", "Quick add from clipboard", ""},
+            {"collection", "📁", "New collection", ""},
+            {"settings", "⚙", "Settings", "Ctrl+,"},
+            {"light", "☀️", "Light theme", ""},
+            {"dark", "🌙", "Dark theme", ""},
+            {"black", "◉", "Black theme", ""},
+            {"system", "💻", "Follow system theme", ""},
+            {"mica", "🪟", "Toggle the Mica background", ""},
+            {"check", "🔍", "Check all links", ""},
+            {"problems", "⚠️", "Show links with issues", ""},
+            {"sync", "☁️", "Sync now", ""},
+            {"export", "⬆", "Export backup", ""},
+            {"folder", "📂", "Open data folder", ""},
+            {"quit", "⏻", "Quit LinkVault", ""},
         };
         const QStringList tokens = normQ(text.mid(1)).simplified().split(' ', Qt::SkipEmptyParts);
         for (const Cmd& c : cmds) {
+            const QString key = QString::fromLatin1(c.key);
+            if ((key == "mica" && !micaSupported()) || (Platform::mobile && (key == "folder" || key == "quit")))
+                continue;
             const QString title = QString::fromUtf8(c.title);
             const QString hay = normQ(title + " " + QString::fromLatin1(c.key));
             bool ok = true;
             for (const auto& t : tokens) if (!hay.contains(t)) { ok = false; break; }
             if (!ok) continue;
             PaletteItem it;
-            it.key = QString::fromLatin1(c.key);
+            it.key = key;
             it.title = title;
             it.subtitle = QString::fromUtf8(c.sub);
             it.glyph = QString::fromUtf8(c.glyph);
@@ -564,7 +571,7 @@ QList<PaletteItem> MainWindow::paletteQuery(const QString& text) {
             PaletteItem it;
             it.key = "col:" + c.id;
             it.title = (c.emoji + "  " + c.name).trimmed();
-            it.subtitle = "رفتن به کالکشن";
+            it.subtitle = "Open collection";
             it.glyph = c.emoji.isEmpty() ? QString("📁") : c.emoji;
             it.color = collectionColor(c.id);
             it.command = true;
@@ -606,16 +613,16 @@ void MainWindow::onPaletteActivated(const PaletteItem& item, bool copyOnly) {
     else if (k == "quick") { QTimer::singleShot(220, this, [this] { showQuickAdd(); }); }
     else if (k == "collection") { front(); newCollection(); }
     else if (k == "settings") { bringToFront(); openSettings(); }
-    else if (k == "light" || k == "dark" || k == "system") {
-        m_themeMode = k == "light" ? 0 : k == "dark" ? 1 : 2;
+    else if (k == "light" || k == "dark" || k == "black" || k == "system") {
+        m_themeMode = k == "light" ? Theme::Light : k == "dark" ? Theme::Dark : k == "black" ? Theme::Black : Theme::System;
         QSettings().setValue("themeMode", m_themeMode);
         applyTheme(true);
     } else if (k == "mica") {
-        if (!micaSupported()) { showToast("پس‌زمینه‌ی شیشه‌ای اینجا در دسترس نیست", 3000); return; }
+        if (!micaSupported()) { showToast("The Mica background is unavailable.", 3000); return; }
         m_mica = !m_mica;
         QSettings().setValue("mica", m_mica);
         updateMaterial();
-        showToast(m_mica ? "🪟  پس‌زمینه‌ی شیشه‌ای روشن شد" : "پس‌زمینه‌ی شیشه‌ای خاموش شد");
+        showToast(m_mica ? "🪟 Mica background enabled" : "Mica background disabled");
     } else if (k == "check") { checkLinks(true); }
     else if (k == "problems") {
         front();
@@ -623,11 +630,11 @@ void MainWindow::onPaletteActivated(const PaletteItem& item, bool copyOnly) {
         m_filter->setCurrent(2);
         refresh(true);
     } else if (k == "sync") {
-        if (!m_sync->enabled()) { bringToFront(); openSettings(); showToast("اول یه پوشه‌ی سینک انتخاب کن", 3000); return; }
+        if (!m_sync->enabled()) { bringToFront(); openSettings(); showToast("Choose a sync folder first.", 3000); return; }
         SyncData remote;
         if (m_sync->readRemote(remote)) mergeRemote(remote);
         m_sync->writeNow();
-        showToast("☁️  سینک انجام شد");
+        showToast("☁️ Sync complete");
     } else if (k == "export") { bringToFront(); exportData(); }
     else if (k == "folder") { QDesktopServices::openUrl(QUrl::fromLocalFile(Storage::dataDir())); }
     else if (k == "quit") { quitApp(); }
@@ -639,7 +646,7 @@ bool MainWindow::micaSupported() const { return !wallpaperPath().isEmpty(); }
 
 void MainWindow::updateMaterial() {
     if (!m_backdrop) return;
-    if (!m_mica || !micaSupported()) { m_backdrop->setMaterial({}, {}); return; }
+    if (Theme::isBlack() || !m_mica || !micaSupported()) { m_backdrop->setMaterial({}, {}); return; }
     QScreen* sc = screen() ? screen() : QGuiApplication::primaryScreen();
     if (!sc) return;
     const QRect g = sc->geometry();
@@ -669,26 +676,26 @@ SyncData MainWindow::syncSnapshot() const {
 
 QString MainWindow::syncStatusText() const {
     if (!m_sync || !m_sync->enabled()) return {};
-    if (m_sync->lastSync() <= 0) return "هنوز سینک نشده";
-    return QString("آخرین سینک: %1").arg(QDateTime::fromSecsSinceEpoch(m_sync->lastSync()).toString("HH:mm:ss"));
+    if (m_sync->lastSync() <= 0) return "Sync has not run yet.";
+    return QString("Last sync: %1").arg(QDateTime::fromSecsSinceEpoch(m_sync->lastSync()).toString("HH:mm:ss"));
 }
 
 void MainWindow::chooseSyncFolder() {
     QString start = qEnvironmentVariable("OneDrive");
     if (start.isEmpty()) start = QDir::homePath();
-    const QString dir = QFileDialog::getExistingDirectory(this, "انتخاب پوشه‌ی سینک (مثلاً داخل OneDrive)", start);
+    const QString dir = QFileDialog::getExistingDirectory(this, "Choose a sync folder, such as a OneDrive folder", start);
     if (dir.isEmpty()) return;
     // use a LinkVault sub-folder unless the chosen folder already is one
     QString folder = dir;
     if (!QFile::exists(dir + "/LinkVault-sync.json") && QFileInfo(dir).fileName() != "LinkVault") folder = dir + "/LinkVault";
-    if (!QDir().mkpath(folder)) { showToast("ساختن پوشه انجام نشد", 3000); return; }
+    if (!QDir().mkpath(folder)) { showToast("Could not create the folder.", 3000); return; }
     m_sync->setFolder(folder);
     QSettings().setValue("syncFolder", folder);
     SyncData remote;
     const bool hadRemote = m_sync->readRemote(remote);
     if (hadRemote) mergeRemote(remote);
     m_sync->writeNow();
-    showToast(hadRemote ? "☁️  سینک روشن شد و لینک‌های اون دستگاه هم اومدن" : "☁️  سینک روشن شد", 3200);
+    showToast(hadRemote ? "☁️ Folder sync enabled and remote links imported" : "☁️ Folder sync enabled", 3200);
 }
 
 void MainWindow::mergeRemote(const SyncData& d) {
@@ -759,6 +766,6 @@ void MainWindow::mergeRemote(const SyncData& d) {
     refreshCollections();
     if (!m_firstShow) refresh(true);
     m_sync->schedule();
-    if (!m_firstShow) showToast("☁️  لینک‌ها از یه دستگاه دیگه به‌روز شدن", 2600);
+    if (!m_firstShow) showToast("☁️ Bookmarks updated from another device", 2600);
     for (const auto& id : std::as_const(toFetch)) startFetch(id);
 }

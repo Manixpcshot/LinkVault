@@ -6,6 +6,7 @@
 #include "fetcher.h"
 #include "theme.h"
 #include "autostart.h"
+#include "platform.h"
 #include "widgets.h"
 #include "settingspage.h"
 #include "hotkey.h"
@@ -35,6 +36,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QScrollArea>
+#include <QScroller>
 #include <QScrollBar>
 #include <QSettings>
 #include <QShortcut>
@@ -76,7 +78,7 @@ static int lvMetric(int index, UINT dpi) {
 static constexpr int kResizeBorder = 6;
 static constexpr int kMaxParallelFetches = 4;
 
-static const char* kSortNames[] = {"جدیدترین", "قدیمی‌ترین", "الفبا", "پربازدیدترین", "آخرین بازدید"};
+static const char* kSortNames[] = {"Newest first", "Oldest first", "Name", "Most visited", "Recently opened"};
 
 // Persian-friendly normalisation for search: Arabic yeh/kaf → Persian, drop ZWNJ, lowercase
 static QString norm(QString s) {
@@ -90,14 +92,15 @@ static QString norm(QString s) {
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("LinkVault");
     setWindowIcon(QIcon(":/icon.png"));
-    setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowMinMaxButtonsHint | Qt::WindowSystemMenuHint);
-    setMinimumSize(560, 480);
+    if (Platform::customFrame)
+        setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowMinMaxButtonsHint | Qt::WindowSystemMenuHint);
+    if (!Platform::mobile) setMinimumSize(700, 480);
 
     QSettings st;
-    m_themeMode = st.contains("themeMode") ? st.value("themeMode").toInt()
-                                           : (st.value("darkMode", false).toBool() ? 1 : 0);
+    const int savedMode = st.value("themeMode", st.value("darkMode", false).toBool() ? Theme::Dark : Theme::Light).toInt();
+    m_themeMode = qBound(int(Theme::Light), savedMode, int(Theme::Black));
     Theme::animRef() = st.value("animations", true).toBool();
-    m_minimizeOnOpen = st.value("minimizeOnOpen", false).toBool();
+    m_minimizeOnOpen = !Platform::mobile && st.value("minimizeOnOpen", false).toBool();
     m_useClipboard = st.value("useClipboard", true).toBool();
     m_sort = qBound(0, st.value("sort", 0).toInt(), 4);
     m_mica = st.value("mica", false).toBool();
@@ -109,19 +112,21 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_collectionFilter = st.value("collectionFilter").toString();
     m_dark = resolveDark();
     Theme::darkRef() = m_dark;
-    if (!restoreGeometry(st.value("geometry").toByteArray())) resize(1200, 780);
+    Theme::blackRef() = m_themeMode == Theme::Black;
+    if (!Platform::mobile && !restoreGeometry(st.value("geometry").toByteArray())) resize(1200, 780);
 
     m_fetcher = new ThumbnailFetcher(this);
     connect(m_fetcher, &ThumbnailFetcher::finished, this, &MainWindow::onFetched);
 
     m_backdrop = new Backdrop;
     m_backdrop->setMouseTracking(true);          // edge-resize cursor
-    m_backdrop->installEventFilter(this);
+    if (Platform::customFrame) m_backdrop->installEventFilter(this);
     m_outer = new QVBoxLayout(m_backdrop);
     m_outer->setContentsMargins(kResizeBorder, kResizeBorder, kResizeBorder, kResizeBorder);
     m_outer->setSpacing(0);
     m_titleBar = new TitleBar(this);
-    m_outer->addWidget(m_titleBar);
+    if (Platform::customFrame) m_outer->addWidget(m_titleBar);
+    else m_titleBar->hide();
 
     m_stack = new SlideStack;
     m_outer->addWidget(m_stack, 1);
@@ -172,8 +177,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_checker, &LinkChecker::idle, this, [this] {
         persist();
         refresh(true);
-        const QString msg = m_checkFound > 0 ? QString("🔍  بررسی تموم شد: %1 لینک مشکل داره").arg(m_checkFound)
-                                             : QString("✓  بررسی تموم شد، همه‌ی لینک‌ها سالمن");
+        const QString msg = m_checkFound > 0 ? QString("🔍 Check complete · %1 with issues").arg(m_checkFound)
+                                             : QString("✓ Check complete · all links are healthy");
         if (m_checkManual || m_checkFound > 0) showToast(msg, 3500);
         m_settings->setLinkStatus(msg);
         m_checkManual = false;
@@ -199,8 +204,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         QString shown;
         const AddResult r = addBookmarkData(url, name, col, &shown);
         if (r == AddResult::Added) m_quickAdd->showSaved(shown);
-        else if (r == AddResult::Duplicate) m_quickAdd->showError(QString("«%1» قبلاً ذخیره شده").arg(shown));
-        else m_quickAdd->showError("آدرس درست نیست، یه لینک معتبر وارد کن.");
+        else if (r == AddResult::Duplicate) m_quickAdd->showError(QString("“%1” is already saved").arg(shown));
+        else m_quickAdd->showError("Enter a valid web address.");
     });
     m_palette = new CommandPalette;
     m_palette->setProvider([this](const QString& q) { return paletteQuery(q); });
@@ -236,13 +241,14 @@ QWidget* MainWindow::buildHome() {
     auto* page = new QWidget;
     page->setObjectName("page");
     auto* root = new QVBoxLayout(page);
-    root->setContentsMargins(24, 4, 12, 4);
-    root->setSpacing(14);
+    const int padding = Platform::mobile ? 12 : 20;
+    root->setContentsMargins(padding, padding, padding, 4);
+    root->setSpacing(Platform::mobile ? 8 : 14);
 
     // ---- header ----
     auto* header = new QHBoxLayout;
     header->setSpacing(10);
-    header->setContentsMargins(0, 0, 12, 0);
+    header->setContentsMargins(0, 0, 0, 0);
     auto* logo = new QLabel;
     logo->setPixmap(QIcon(":/icon.png").pixmap(44, 44));
     auto* titleBox = new QVBoxLayout;
@@ -259,8 +265,9 @@ QWidget* MainWindow::buildHome() {
     header->addStretch();
 
     m_search = new SearchBox;
-    m_search->setPlaceholderText("جستجو بین اسم و آدرس لینک‌ها...   Ctrl+F");
-    m_search->setWidths(290, 400);
+    m_search->setPlaceholderText("Search title or URL");
+    if (Platform::mobile) m_search->setStretchable();
+    else m_search->setWidths(200, 250);
     m_searchTimer = new QTimer(this);
     m_searchTimer->setSingleShot(true);
     m_searchTimer->setInterval(110);                    // debounce typing
@@ -272,21 +279,23 @@ QWidget* MainWindow::buildHome() {
         if (!m_visibleOrder.isEmpty()) onOpen(m_visibleOrder.first());
     });
 
-    auto* addBtn = new QPushButton("+  افزودن سایت");
+    auto* addBtn = new QPushButton("+ Add link");
     addBtn->setObjectName("primary");
     addBtn->setCursor(Qt::PointingHandCursor);
     connect(addBtn, &QPushButton::clicked, this, &MainWindow::addBookmark);
 
     auto* setBtn = new QPushButton("⚙");
     setBtn->setObjectName("iconBtn");
-    setBtn->setToolTip("تنظیمات (Ctrl+,)");
+    setBtn->setToolTip("Settings (Ctrl+,)");
+    setBtn->setAccessibleName("Settings");
     setBtn->setCursor(Qt::PointingHandCursor);
     connect(setBtn, &QPushButton::clicked, this, &MainWindow::openSettings);
 
-    header->addWidget(m_search);
+    if (!Platform::mobile) header->addWidget(m_search);
     header->addWidget(addBtn);
     header->addWidget(setBtn);
     root->addLayout(header);
+    if (Platform::mobile) root->addWidget(m_search);
 
     // ---- collections ----
     m_colBar = new CollectionBar;
@@ -300,21 +309,21 @@ QWidget* MainWindow::buildHome() {
     connect(m_colBar, &CollectionBar::dropped, this, &MainWindow::moveToCollection, Qt::QueuedConnection);
     connect(m_colBar, &CollectionBar::menuRequested, this, &MainWindow::showCollectionMenu);
     auto* colRow = new QHBoxLayout;
-    colRow->setContentsMargins(0, 0, 12, 0);
+    colRow->setContentsMargins(0, 0, 0, 0);
     colRow->addWidget(m_colBar);
     root->addLayout(colRow);
 
     // ---- filter / sort row ----
     auto* bar = new QHBoxLayout;
-    bar->setContentsMargins(0, 0, 12, 0);
+    bar->setContentsMargins(0, 0, 0, 0);
     bar->setSpacing(10);
-    m_filter = new SegmentedControl({"همه", "📌 سنجاق‌شده", "⚠️ مشکل‌دار"});
+    m_filter = new SegmentedControl({"All", "📌 Pinned", "⚠️ Issues"});
     connect(m_filter, &SegmentedControl::currentChanged, this, [this](int i) {
         m_filterMode = i;
         refresh(true);
         smoothScrollTo(0);
     });
-    m_resultLabel = new QLabel;
+    m_resultLabel = new QLabel(page);
     m_resultLabel->setObjectName("resultLabel");
     m_sortBtn = new QPushButton;
     m_sortBtn->setObjectName("sortBtn");
@@ -322,8 +331,12 @@ QWidget* MainWindow::buildHome() {
     connect(m_sortBtn, &QPushButton::clicked, this, &MainWindow::showSortMenu);
     updateSortButton();
     bar->addWidget(m_filter);
-    bar->addSpacing(6);
-    bar->addWidget(m_resultLabel);
+    if (Platform::mobile) {
+        m_resultLabel->hide();
+    } else {
+        bar->addSpacing(6);
+        bar->addWidget(m_resultLabel);
+    }
     bar->addStretch();
     bar->addWidget(m_sortBtn);
     root->addLayout(bar);
@@ -334,6 +347,7 @@ QWidget* MainWindow::buildHome() {
     m_scroll->setWidgetResizable(true);
     m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_scroll->viewport()->setAutoFillBackground(false);
+    if (Platform::mobile) QScroller::grabGesture(m_scroll->viewport(), QScroller::TouchGesture);
 
     auto* holder = new QWidget;
     holder->setObjectName("gridHolder");
@@ -367,10 +381,12 @@ QWidget* MainWindow::buildHome() {
     m_emptyTitle = new QLabel;
     m_emptyTitle->setObjectName("emptyTitle");
     m_emptyTitle->setAlignment(Qt::AlignCenter);
+    m_emptyTitle->setWordWrap(true);
     m_emptyText = new QLabel;
     m_emptyText->setObjectName("emptyText");
     m_emptyText->setAlignment(Qt::AlignCenter);
-    m_emptyBtn = new QPushButton("+  افزودن اولین سایت");
+    m_emptyText->setWordWrap(true);
+    m_emptyBtn = new QPushButton("+ Add your first link");
     m_emptyBtn->setObjectName("primary");
     m_emptyBtn->setCursor(Qt::PointingHandCursor);
     connect(m_emptyBtn, &QPushButton::clicked, this, &MainWindow::addBookmark);
@@ -395,6 +411,7 @@ void MainWindow::connectSettings() {
         m_themeMode = mode;
         QSettings().setValue("themeMode", mode);
         applyTheme(true);
+        m_settings->sync(settingsState());
     });
     connect(m_settings, &SettingsPage::autoStartChanged, this, [](bool on) { AutoStart::setEnabled(on); });
     connect(m_settings, &SettingsPage::animationsChanged, this, [](bool on) {
@@ -439,12 +456,12 @@ void MainWindow::connectSettings() {
         SyncData remote;
         if (m_sync->readRemote(remote)) mergeRemote(remote);
         m_sync->writeNow();
-        showToast("☁️  سینک انجام شد");
+        showToast("☁️ Sync complete");
     });
     connect(m_settings, &SettingsPage::syncDisableRequested, this, [this] {
         m_sync->setFolder({});
         QSettings().remove("syncFolder");
-        showToast("سینک خاموش شد (فایل‌های داخل پوشه دست نخوردن)", 3000);
+        showToast("Folder sync is off. Existing files are kept.", 3000);
     });
     connect(m_settings, &SettingsPage::openFolderRequested, this, [] {
         QDesktopServices::openUrl(QUrl::fromLocalFile(Storage::dataDir()));
@@ -510,8 +527,8 @@ void MainWindow::closeEvent(QCloseEvent* e) {
         if (!m_trayHintShown) {
             m_trayHintShown = true;
             QSettings().setValue("trayHintShown", true);
-            m_tray->showMessage("LinkVault هنوز بازه",
-                                "اینجا توی System Tray منتظرته. میانبرها و یادآوری‌ها کار می‌کنن.",
+            m_tray->showMessage("LinkVault is still running",
+                                "Open LinkVault from the system tray. Shortcuts and reminders remain active.",
                                 QSystemTrayIcon::Information, 4000);
         }
         return;
@@ -562,9 +579,9 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* ev) {
 
 void MainWindow::updateFrameState() {
     const bool max = isMaximized() || isFullScreen();
-    const int b = max ? 0 : kResizeBorder;
+    const int b = max || !Platform::customFrame ? 0 : kResizeBorder;
     m_outer->setContentsMargins(b, b, b, b);
-    m_backdrop->setFramed(!max);
+    m_backdrop->setFramed(Platform::customFrame && !max);
     m_titleBar->setMaximized(max);
     if (max) m_backdrop->unsetCursor();
 }
@@ -705,7 +722,7 @@ bool MainWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr
 // ============================== theme & pages ==============================
 
 bool MainWindow::resolveDark() const {
-    if (m_themeMode == 1) return true;
+    if (m_themeMode == Theme::Dark || m_themeMode == Theme::Black) return true;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     if (m_themeMode == 2) return qApp->styleHints()->colorScheme() == Qt::ColorScheme::Dark;
 #endif
@@ -714,19 +731,25 @@ bool MainWindow::resolveDark() const {
 
 void MainWindow::applyTheme(bool crossfade) {
     const bool dark = resolveDark();
+    const bool black = m_themeMode == Theme::Black;
     QLabel* shot = nullptr;
-    if (crossfade && Theme::animations() && isVisible() && dark != m_dark) {
+    if (m_themeOverlay) delete m_themeOverlay.data();
+    if (crossfade && Theme::animations() && isVisible() && (dark != m_dark || black != Theme::isBlack())) {
         // snapshot the old look and fade it out over the new one
         shot = new QLabel(m_backdrop);
         shot->setPixmap(m_backdrop->grab());
         shot->setGeometry(m_backdrop->rect());
+        shot->setAttribute(Qt::WA_TransparentForMouseEvents);
         shot->show();
         shot->raise();
+        m_themeOverlay = shot;
     }
     m_dark = dark;
     Theme::darkRef() = dark;
+    Theme::blackRef() = black;
     qApp->setStyleSheet(Theme::styleSheet(dark));
     m_backdrop->setDark(dark);
+    updateMaterial();
     m_titleBar->setDark(dark);
     m_search->setDark(dark);
     for (auto* c : std::as_const(m_cards)) c->setDark(dark);
@@ -744,7 +767,7 @@ void MainWindow::applyTheme(bool crossfade) {
         auto* eff = new QGraphicsOpacityEffect(shot);
         shot->setGraphicsEffect(eff);
         auto* a = new QPropertyAnimation(eff, "opacity", shot);
-        a->setDuration(440);
+        a->setDuration(220);
         a->setEasingCurve(Theme::easeInOut());
         a->setStartValue(1.0);
         a->setEndValue(0.0);
@@ -766,9 +789,11 @@ void MainWindow::goHome() { m_stack->slideTo(0); }
 
 void MainWindow::smoothScrollTo(int value) {
     QScrollBar* sb = m_scroll->verticalScrollBar();
-    if (!Theme::animations() || !isVisible()) { sb->setValue(value); return; }
+    if (m_scrollMotion) m_scrollMotion->stop();
+    if (!Theme::animations() || !isVisible() || sb->value() == value) { sb->setValue(value); return; }
     auto* a = new QPropertyAnimation(sb, "value", sb);
-    a->setDuration(520);
+    m_scrollMotion = a;
+    a->setDuration(260);
     a->setEasingCurve(Theme::easeOut());
     a->setStartValue(sb->value());
     a->setEndValue(value);
@@ -781,7 +806,10 @@ void MainWindow::showToast(const QString& text, int msec) {
 }
 
 void MainWindow::updateSortButton() {
-    m_sortBtn->setText(QString("⇅  %1").arg(QString::fromUtf8(kSortNames[m_sort])));
+    const auto sort = QString::fromUtf8(kSortNames[m_sort]);
+    m_sortBtn->setText(Platform::mobile ? QStringLiteral("⇅") : QString("⇅  %1").arg(sort));
+    m_sortBtn->setToolTip(QString("Sort: %1").arg(sort));
+    m_sortBtn->setAccessibleName(m_sortBtn->toolTip());
 }
 
 void MainWindow::showSortMenu() {
@@ -898,12 +926,12 @@ void MainWindow::refresh(bool animate) {
     };
     const bool sections = m_filterMode == 0 && !pinned.isEmpty();
     if (sections) {
-        m_pinHeader->setText(QString("📌  سنجاق‌شده‌ها  ·  %1").arg(pinned.size()));
+        m_pinHeader->setText(QString("📌 Pinned · %1").arg(pinned.size()));
         items << CardGrid::Item{m_pinHeader, true};
     }
     addRows(pinned);
     if (sections && !others.isEmpty()) {
-        m_allHeader->setText(QString("🔖  بقیه‌ی لینک‌ها  ·  %1").arg(others.size()));
+        m_allHeader->setText(QString("🔖 Other links · %1").arg(others.size()));
         items << CardGrid::Item{m_allHeader, true};
     }
     addRows(others);
@@ -914,33 +942,33 @@ void MainWindow::refresh(bool animate) {
     const int shown = int(pinned.size() + others.size());
     if (shown == 0) {
         if (m_items.isEmpty()) {
-            m_emptyTitle->setText("هنوز سایتی اضافه نکردی");
-            m_emptyText->setText("لینک‌هاتو اینجا جمع کن، با عکس و اسم دلخواه ✨");
+            m_emptyTitle->setText("Your library is empty");
+            m_emptyText->setText("Save your first link to start your library.");
         } else if (searching) {
-            m_emptyTitle->setText(QString("برای «%1» چیزی پیدا نشد 🤷").arg(m_search->text().trimmed()));
-            m_emptyText->setText("یه کلمه‌ی دیگه یا بخشی از آدرس سایت رو امتحان کن");
+            m_emptyTitle->setText(QString("No matches for “%1”").arg(m_search->text().trimmed()));
+            m_emptyText->setText("Try another word or part of the URL.");
         } else if (inScope == 0) {
-            m_emptyTitle->setText(QString("کالکشن «%1» هنوز خالیه").arg(collectionLabel(m_collectionFilter)));
-            m_emptyText->setText("کارت‌ها رو بکش و روی اسم کالکشن رها کن، یا از منوی کارت «انتقال به» رو بزن");
+            m_emptyTitle->setText(QString("“%1” is empty").arg(collectionLabel(m_collectionFilter)));
+            m_emptyText->setText("Drag a card here or choose Move to collection from its menu.");
         } else if (m_filterMode == 2) {
-            m_emptyTitle->setText("همه‌ی لینک‌ها سالمن ✅");
-            m_emptyText->setText("لینک خراب یا منتقل‌شده‌ای پیدا نشد");
+            m_emptyTitle->setText("All links are healthy");
+            m_emptyText->setText("No broken or redirected links were found.");
         } else {
-            m_emptyTitle->setText("هنوز چیزی سنجاق نکردی 📌");
-            m_emptyText->setText("روی آیکن سنجاق گوشه‌ی هر کارت بزن تا همیشه بالا بمونه");
+            m_emptyTitle->setText("No pinned links");
+            m_emptyText->setText("Use the pin icon on a card to keep it at the top.");
         }
     }
     m_emptyBtn->setVisible(m_items.isEmpty());
     m_emptyBox->setVisible(shown == 0);
     m_grid->setVisible(shown > 0);
 
-    m_resultLabel->setText(searching ? QString("%1 نتیجه").arg(shown) : QString());
+    m_resultLabel->setText(searching ? QString("Results: %1").arg(shown) : QString());
     m_count->setText(pinnedTotal > 0
-        ? QString("%1 لینک ذخیره شده  ·  %2 سنجاق‌شده").arg(m_items.size()).arg(pinnedTotal)
-        : QString("%1 لینک ذخیره شده").arg(m_items.size()));
-    m_filter->setItemText(0, QString("همه  %1").arg(inScope));
-    m_filter->setItemText(1, QString("📌 سنجاق‌شده  %1").arg(pinnedTotal));
-    m_filter->setItemText(2, QString("⚠️ مشکل‌دار  %1").arg(problemTotal));
+        ? QString("Saved: %1 · Pinned: %2").arg(m_items.size()).arg(pinnedTotal)
+        : QString("Saved: %1").arg(m_items.size()));
+    m_filter->setItemText(0, QString("All %1").arg(inScope));
+    m_filter->setItemText(1, QString("Pinned %1").arg(pinnedTotal));
+    m_filter->setItemText(2, QString("Issues %1").arg(problemTotal));
 }
 
 // ============================== actions ==============================
@@ -991,13 +1019,13 @@ void MainWindow::addBookmark() {
         clip = QApplication::clipboard()->text().trimmed();
         if (!clip.startsWith("http") || clip.contains('\n')) clip.clear();
     }
-    BookmarkDialog d(this, "افزودن سایت", clip);
+    BookmarkDialog d(this, "Add link", clip);
     if (d.exec() != QDialog::Accepted) return;
     QString shown;
     // new links land in the collection you're looking at
     if (addBookmarkData(d.url(), d.name(), m_collectionFilter, &shown) == AddResult::Duplicate) {
         m_search->setText(shown);           // show the existing one instead of a duplicate
-        showToast(QString("«%1» قبلاً ذخیره شده").arg(shown), 3000);
+        showToast(QString("“%1” is already saved").arg(shown), 3000);
     }
 }
 
@@ -1016,7 +1044,7 @@ void MainWindow::onCopy(const QString& id) {
     const int i = indexOf(id);
     if (i < 0) return;
     QApplication::clipboard()->setText(m_items[i].url);
-    showToast("✓  لینک کپی شد");
+    showToast("✓ Link copied");
 }
 
 void MainWindow::togglePin(const QString& id) {
@@ -1036,7 +1064,7 @@ void MainWindow::onEdit(const QString& id) {
     const int i = indexOf(id);
     if (i < 0) return;
     const Bookmark before = m_items[i];
-    BookmarkDialog d(this, "ویرایش لینک", before.url, before.name);
+    BookmarkDialog d(this, "Edit bookmark", before.url, before.name);
     if (d.exec() != QDialog::Accepted) return;
 
     const int j = indexOf(id);          // list may have changed while dialog was open
@@ -1073,7 +1101,7 @@ void MainWindow::onDelete(const QString& id) {
     else finish();
 
     // no scary confirmation popup: delete instantly, offer undo
-    m_toast->showMessage(QString("«%1» حذف شد").arg(m_pending.b.name), "↺  برگردون", 5000);
+    m_toast->showMessage(QString("“%1” deleted").arg(m_pending.b.name), "↺ Undo", 5000);
 }
 
 void MainWindow::undoDelete() {
@@ -1101,7 +1129,7 @@ void MainWindow::commitPendingDelete() {
 // ============================== import / export ==============================
 
 void MainWindow::exportData() {
-    const QString path = QFileDialog::getSaveFileName(this, "ذخیره‌ی نسخه‌ی پشتیبان",
+    const QString path = QFileDialog::getSaveFileName(this, "Save backup",
         QDir::homePath() + "/LinkVault-backup.json", "LinkVault (*.json)");
     if (path.isEmpty()) return;
     QJsonArray arr;
@@ -1113,15 +1141,15 @@ void MainWindow::exportData() {
     }
     QSaveFile f(path);
     const bool ok = f.open(QIODevice::WriteOnly) && f.write(QJsonDocument(arr).toJson()) >= 0 && f.commit();
-    showToast(ok ? QString("✓  %1 لینک ذخیره شد").arg(m_items.size()) : QString("ذخیره‌ی فایل انجام نشد"), 3000);
+    showToast(ok ? QString("✓ Exported bookmarks: %1").arg(m_items.size()) : QString("Could not save the file."), 3000);
 }
 
 void MainWindow::importData() {
-    const QString path = QFileDialog::getOpenFileName(this, "وارد کردن لینک‌ها", QDir::homePath(),
-        "LinkVault / بوکمارک مرورگر (*.json *.html *.htm)");
+    const QString path = QFileDialog::getOpenFileName(this, "Import bookmarks", QDir::homePath(),
+        "LinkVault or browser bookmarks (*.json *.html *.htm)");
     if (path.isEmpty()) return;
     QFile f(path);
-    if (!f.open(QIODevice::ReadOnly)) { showToast("فایل باز نشد", 3000); return; }
+    if (!f.open(QIODevice::ReadOnly)) { showToast("Could not open the file.", 3000); return; }
     const QByteArray data = f.readAll();
 
     QList<Bookmark> incoming;
@@ -1164,13 +1192,13 @@ void MainWindow::importData() {
         m_items.append(b);
         added << b.id;
     }
-    if (added.isEmpty()) { showToast("لینک جدیدی برای وارد کردن نبود", 3000); return; }
+    if (added.isEmpty()) { showToast("No new bookmarks to import.", 3000); return; }
     persist();
     for (const auto& id : std::as_const(added)) m_loading.insert(id);
     refreshCollections();
     refresh(false);
     for (const auto& id : std::as_const(added)) startFetch(id);
-    showToast(QString("✓  %1 لینک وارد شد").arg(added.size()), 3000);
+    showToast(QString("✓ Imported bookmarks: %1").arg(added.size()), 3000);
 }
 
 // ============================== thumbnails ==============================

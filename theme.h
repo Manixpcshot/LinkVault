@@ -6,11 +6,14 @@
 
 namespace Theme {
 struct Colors { QColor bg, card, border, text, muted, accent, accentHover, input, glass; };
+enum Mode { Light, Dark, System, Black };
 
 // global UI state shared by custom-painted widgets
 inline bool& darkRef()  { static bool d = false; return d; }
+inline bool& blackRef() { static bool b = false; return b; }
 inline bool& animRef()  { static bool a = true;  return a; }
 inline bool isDark()     { return darkRef(); }
+inline bool isBlack()    { return blackRef(); }
 inline bool animations() { return animRef(); }
 
 // ---- motion: cubic-bezier curves close to Windows 11 / Fluent motion ----
@@ -19,8 +22,8 @@ inline QEasingCurve bezier(qreal x1, qreal y1, qreal x2, qreal y2) {
     c.addCubicBezierSegment(QPointF(x1, y1), QPointF(x2, y2), QPointF(1, 1));
     return c;
 }
-inline QEasingCurve easeOut()    { return bezier(0.16, 1.0, 0.30, 1.0); }  // soft decelerate (enter / move)
-inline QEasingCurve easeInOut()  { return bezier(0.65, 0.0, 0.35, 1.0); }  // point to point / cross-fade
+inline QEasingCurve easeOut()    { return bezier(0.22, 1.0, 0.36, 1.0); }
+inline QEasingCurve easeInOut()  { return bezier(0.40, 0.0, 0.20, 1.0); }
 inline QEasingCurve easeIn()     { return bezier(0.55, 0.0, 0.90, 0.40); } // exits
 inline QEasingCurve easeSpring(qreal overshoot = 1.15) {                   // gentle overshoot (was OutBack 1.70)
     QEasingCurve c(QEasingCurve::OutBack);
@@ -29,6 +32,10 @@ inline QEasingCurve easeSpring(qreal overshoot = 1.15) {                   // ge
 }
 
 inline Colors colors(bool dark) {
+    if (dark && isBlack()) {
+        return {QColor("#000000"), QColor("#101014"), QColor("#303038"), QColor("#F5F4FA"), QColor("#B0ADBF"),
+                QColor("#7664EB"), QColor("#907EFF"), QColor("#16161C"), QColor("#101014")};
+    }
     return dark
         ? Colors{QColor("#12131C"), QColor("#1C1E2A"), QColor("#2C2F3E"), QColor("#ECEDF4"), QColor("#8B90A3"),
                  QColor("#8B7CFF"), QColor("#9D90FF"), QColor("#1F2230"), QColor(30, 33, 48, 215)}

@@ -2,6 +2,7 @@
 #include <QMainWindow>
 #include <QHash>
 #include <QKeySequence>
+#include <QPointer>
 #include <QSet>
 #include <QStringList>
 #include "bookmark.h"
@@ -10,6 +11,7 @@
 
 class QLabel;
 class QMenu;
+class QPropertyAnimation;
 class QPushButton;
 class QScrollArea;
 class QSystemTrayIcon;
@@ -154,6 +156,8 @@ private:
     QPushButton* m_sortBtn = nullptr;
     QLabel* m_resultLabel = nullptr;
     QLabel* m_count = nullptr;
+    QPointer<QLabel> m_themeOverlay;
+    QPointer<QPropertyAnimation> m_scrollMotion;
     QScrollArea* m_scroll = nullptr;
     CardGrid* m_grid = nullptr;
     QLabel* m_pinHeader = nullptr;
@@ -180,7 +184,7 @@ private:
     bool m_nativeStyled = false;
     bool m_firstShow = true;
     bool m_wasMaximized = false;  // state to return to when leaving full screen
-    int m_themeMode = 0;          // 0 light, 1 dark, 2 follow system
+    int m_themeMode = 0;          // Theme::Mode, saved as an integer
     int m_sort = 0;               // 0 newest, 1 oldest, 2 name, 3 most opened, 4 recently opened
     int m_filterMode = 0;         // 0 all, 1 pinned only, 2 links with problems
     QString m_collectionFilter;   // empty = all collections
