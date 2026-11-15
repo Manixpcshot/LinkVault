@@ -153,7 +153,7 @@ void FloatingPanel::paintEvent(QPaintEvent*) {
 // ============================== QuickAddPanel ==============================
 
 QuickAddPanel::QuickAddPanel(QWidget* parent) : FloatingPanel(parent) {
-    setFixedSize(420 + 2 * kShadow, 330 + 2 * kShadow);
+    setFixedSize(420 + 2 * kShadow, 365 + 2 * kShadow);
     m_form = new QWidget;
     m_form->setObjectName("gridHolder");
     auto* v = new QVBoxLayout(m_form);
@@ -176,10 +176,15 @@ QuickAddPanel::QuickAddPanel(QWidget* parent) : FloatingPanel(parent) {
     m_url->setLayoutDirection(Qt::LeftToRight);
     m_name = new QLineEdit;
     m_name->setPlaceholderText("Title (optional)");
+    m_note = new QLineEdit;
+    m_note->setPlaceholderText("Note (optional)");
+    m_note->setAccessibleName("Bookmark note");
+    m_note->setMaxLength(1000);
     m_collection = new QComboBox;
     m_collection->setCursor(Qt::PointingHandCursor);
     v->addWidget(m_url);
     v->addWidget(m_name);
+    v->addWidget(m_note);
     v->addWidget(m_collection);
     m_error = new QLabel;
     m_error->setObjectName("error");
@@ -187,7 +192,7 @@ QuickAddPanel::QuickAddPanel(QWidget* parent) : FloatingPanel(parent) {
     v->addWidget(m_error);
     body()->addWidget(m_form);
 
-    for (QWidget* w : {static_cast<QWidget*>(m_url), static_cast<QWidget*>(m_name), static_cast<QWidget*>(m_collection)})
+    for (QWidget* w : QList<QWidget*>{m_url, m_name, m_note, m_collection})
         w->installEventFilter(this);
 
     m_successAnim = anim(this, 520, Theme::easeSpring(1.4));
@@ -201,6 +206,7 @@ void QuickAddPanel::open(const QString& url, const QList<QPair<QString, QString>
     m_error->clear();
     m_url->setText(url);
     m_name->clear();
+    m_note->clear();
     m_collection->clear();
     for (const auto& c : collections) m_collection->addItem(c.second, c.first);
     const int idx = m_collection->findData(current);
@@ -231,7 +237,8 @@ void QuickAddPanel::submit() {
     if (m_success > 0) return;
     const QUrl u = parseUserUrl(m_url->text());
     if (!isWebUrl(u)) { showError("Enter a valid web address."); m_url->setFocus(); return; }
-    emit submitted(u.toString(), m_name->text().trimmed(), m_collection->currentData().toString());
+    emit submitted(u.toString(), m_name->text().trimmed(), m_collection->currentData().toString(),
+                   m_note->text().trimmed());
 }
 
 void QuickAddPanel::showError(const QString& text) {

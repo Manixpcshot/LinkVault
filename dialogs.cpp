@@ -7,6 +7,8 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QComboBox>
+#include <QDialogButtonBox>
 
 QUrl parseUserUrl(QString s) {
     s = s.trimmed();
@@ -22,7 +24,8 @@ bool isWebUrl(const QUrl& u) {
 
 // ============================== BookmarkDialog ==============================
 
-BookmarkDialog::BookmarkDialog(QWidget* parent, const QString& title, const QString& url, const QString& name)
+BookmarkDialog::BookmarkDialog(QWidget* parent, const QString& title, const QString& url, const QString& name,
+                               const QString& note)
     : QDialog(parent) {
     setWindowTitle(title);
     setMinimumWidth(Platform::mobile ? 260 : 480);
@@ -47,6 +50,15 @@ BookmarkDialog::BookmarkDialog(QWidget* parent, const QString& title, const QStr
     m_name->setPlaceholderText("Example: Project notes");
     lay->addWidget(l2); lay->addWidget(m_name);
 
+    auto* noteLabel = new QLabel("Note (optional)");
+    noteLabel->setObjectName("muted");
+    m_note = new QLineEdit(note);
+    m_note->setMaxLength(1000);
+    m_note->setPlaceholderText("Why are you saving this link?");
+    m_note->setAccessibleName("Bookmark note");
+    lay->addWidget(noteLabel);
+    lay->addWidget(m_note);
+
     auto* hint = new QLabel("Leave the title blank to use the page title. LinkVault also tries to fetch a preview.");
     hint->setObjectName("muted"); hint->setWordWrap(true);
     lay->addWidget(hint);
@@ -69,6 +81,7 @@ BookmarkDialog::BookmarkDialog(QWidget* parent, const QString& title, const QStr
 
 QString BookmarkDialog::url() const  { return parseUserUrl(m_url->text()).toString(); }
 QString BookmarkDialog::name() const { return m_name->text().trimmed(); }
+QString BookmarkDialog::note() const { return m_note->text().trimmed(); }
 
 void BookmarkDialog::accept() {
     if (!isWebUrl(parseUserUrl(m_url->text()))) {
@@ -78,6 +91,66 @@ void BookmarkDialog::accept() {
         return;
     }
     QDialog::accept();
+}
+
+SmartCollectionDialog::SmartCollectionDialog(QWidget* parent, const QString& name, const SmartRule& rule)
+    : QDialog(parent) {
+    setWindowTitle(name.isEmpty() ? "New smart collection" : "Edit smart collection");
+    auto* layout = new QVBoxLayout(this);
+    auto* title = new QLabel(windowTitle());
+    title->setObjectName("dialogTitle");
+    layout->addWidget(title);
+
+    auto addText = [&](const QString& label, const QString& text, const QString& example) {
+        layout->addWidget(new QLabel(label));
+        auto* field = new QLineEdit(text);
+        field->setAccessibleName(label);
+        field->setPlaceholderText(example);
+        layout->addWidget(field);
+        return field;
+    };
+    m_name = addText("Name", name, "YouTube this week");
+    m_name->setMaxLength(60);
+    m_text = addText("Words in title, URL, or note", rule.text, "Optional");
+    m_text->setMaxLength(200);
+    m_domain = addText("Website", rule.domain, "youtube.com");
+    m_domain->setMaxLength(255);
+    layout->addWidget(new QLabel("Saved"));
+    m_period = new QComboBox;
+    m_period->addItems({"Any time", "Today", "This week", "Past 7 days", "Past 30 days"});
+    m_period->setCurrentIndex(rule.period);
+    layout->addWidget(m_period);
+    m_error = new QLabel;
+    m_error->setObjectName("error");
+    m_error->setWordWrap(true);
+    m_error->hide();
+    layout->addWidget(m_error);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, this, &SmartCollectionDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    setMinimumWidth(Platform::mobile ? 270 : 410);
+}
+
+QString SmartCollectionDialog::name() const { return m_name->text().simplified(); }
+
+SmartRule SmartCollectionDialog::rule() const {
+    const QString input = m_domain->text().trimmed();
+    const QUrl url = parseUserUrl(input);
+    QString host = isWebUrl(url) ? url.host().toLower() : QString();
+    if (host.startsWith("www.")) host.remove(0, 4);
+    return {m_text->text().simplified(), host, SmartRule::Period(m_period->currentIndex())};
+}
+
+void SmartCollectionDialog::accept() {
+    const auto filter = rule();
+    QString error;
+    if (name().isEmpty()) error = "Enter a name for the collection.";
+    else if (!m_domain->text().trimmed().isEmpty() && filter.domain.isEmpty()) error = "Enter a website such as youtube.com.";
+    else if (!filter.enabled()) error = "Add at least one filter.";
+    if (error.isEmpty()) { QDialog::accept(); return; }
+    m_error->setText(error);
+    m_error->show();
 }
 
 // ============================== CollectionDialog ==============================

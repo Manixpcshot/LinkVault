@@ -8,6 +8,7 @@
 #include "dialogs.h"
 #include "hotkey.h"
 #include "linkchecker.h"
+#include "notebook.h"
 #include "settingspage.h"
 #include "theme.h"
 #include "titlebar.h"
@@ -162,10 +163,54 @@ void MainWindow::refreshCollections() {
     for (const auto& b : std::as_const(m_items)) counts[b.collection]++;
     QList<CollectionBar::Chip> chips;
     chips << CollectionBar::Chip{QString(), QString("🗂 All"), QColor(), int(m_items.size())};
-    for (const auto& c : std::as_const(m_collections))
-        chips << CollectionBar::Chip{c.id, (c.emoji + "  " + c.name).trimmed(), collectionColor(c.id), counts.value(c.id)};
+    const auto now = QDateTime::currentDateTime();
+    for (const auto& c : std::as_const(m_collections)) {
+        const bool smart = c.rule.enabled();
+        const int count = smart ? int(std::count_if(m_items.cbegin(), m_items.cend(),
+            [this, &c, &now](const Bookmark& bookmark) { return matchesCollection(bookmark, c, now); })) : counts.value(c.id);
+        chips << CollectionBar::Chip{c.id, (c.emoji + "  " + c.name).trimmed(), collectionColor(c.id), count, !smart};
+    }
     m_colBar->setChips(chips);
     m_colBar->setCurrent(m_collectionFilter, false);
+}
+
+void MainWindow::chooseCollectionType() {
+    QMenu menu(this);
+    auto* manual = menu.addAction("New collection…");
+    auto* smart = menu.addAction("New smart collection…");
+    const auto* chosen = menu.exec(m_colBar->mapToGlobal(QPoint(0, m_colBar->height())));
+    if (chosen == manual) newCollection();
+    else if (chosen == smart) editSmartCollection();
+}
+
+void MainWindow::editSmartCollection(const QString& id) {
+    const int index = collectionIndex(id);
+    const auto previous = index >= 0 ? m_collections[index] : Collection{};
+    SmartRule rule = previous.rule;
+    if (index < 0) rule.text = m_search->text().simplified();
+    SmartCollectionDialog dialog(this, previous.name, rule);
+    if (dialog.exec() != QDialog::Accepted) return;
+    Collection updated = previous;
+    updated.name = dialog.name();
+    updated.rule = dialog.rule();
+    updated.modified = nowSecs();
+    if (id.isEmpty()) {
+        updated.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        updated.created = updated.modified;
+        updated.emoji = QStringLiteral("⚡");
+        m_collections.append(updated);
+        m_collectionFilter = updated.id;
+        QSettings().setValue("collectionFilter", updated.id);
+        m_search->clear();
+    } else {
+        const int current = collectionIndex(id);
+        if (current < 0) return;
+        updated.color = m_collections[current].color;
+        m_collections[current] = updated;
+    }
+    persist();
+    refreshCollections();
+    refresh(true);
 }
 
 void MainWindow::newCollection(const QString& assignBookmark) {
@@ -190,6 +235,7 @@ void MainWindow::newCollection(const QString& assignBookmark) {
 void MainWindow::editCollection(const QString& id) {
     const int ci = collectionIndex(id);
     if (ci < 0) return;
+    if (m_collections[ci].rule.enabled()) { editSmartCollection(id); return; }
     CollectionDialog d(this, "Edit collection", m_collections[ci].name, m_collections[ci].emoji);
     if (d.exec() != QDialog::Accepted) return;
     const int cj = collectionIndex(id);
@@ -227,6 +273,8 @@ void MainWindow::deleteCollection(const QString& id) {
 void MainWindow::moveToCollection(const QString& bookmarkId, const QString& collectionId) {
     const int i = indexOf(bookmarkId);
     if (i < 0) return;
+    const int targetIndex = collectionIndex(collectionId);
+    if (targetIndex >= 0 && m_collections[targetIndex].rule.enabled()) return;
     const QString target = collectionIndex(collectionId) >= 0 ? collectionId : QString();
     if (m_items[i].collection == target) return;
     m_items[i].collection = target;
@@ -241,7 +289,7 @@ void MainWindow::showCollectionMenu(const QString& id, const QPoint& globalPos) 
     const int ci = collectionIndex(id);
     if (ci < 0) return;
     QMenu m(this);
-    QAction* edit = m.addAction("✏️ Change name and icon");
+    QAction* edit = m.addAction(m_collections[ci].rule.enabled() ? "✏️ Edit smart rules" : "✏️ Change name and icon");
     QMenu* colors = m.addMenu("🎨 Color");
     QAction* autoColor = colors->addAction("✨ Automatic (site colors)");
     autoColor->setCheckable(true);
@@ -292,6 +340,7 @@ void MainWindow::extendCardMenu(QMenu& menu, const QString& id) {
     connect(none, &QAction::triggered, this, [this, id] { later(this, [this, id] { moveToCollection(id, {}); }); });
     if (!m_collections.isEmpty()) mv->addSeparator();
     for (const auto& c : std::as_const(m_collections)) {
+        if (c.rule.enabled()) continue;
         QAction* a = mv->addAction((c.emoji + "  " + c.name).trimmed());
         a->setCheckable(true);
         a->setChecked(b.collection == c.id);
@@ -471,6 +520,8 @@ void MainWindow::quitApp() {
     m_quitting = true;
     commitPendingDelete();
     if (isVisible()) QSettings().setValue("geometry", saveGeometry());
+    if (m_desktopNote && m_desktopNote->isVisible())
+        QSettings().setValue("desktopNoteGeometry", m_desktopNote->saveGeometry());
     if (m_sync && m_sync->enabled()) m_sync->writeNow();
     if (m_tray) m_tray->hide();
     QTimer::singleShot(0, qApp, &QCoreApplication::quit);
@@ -493,7 +544,8 @@ void MainWindow::showQuickAdd() {
     QString clip = QApplication::clipboard()->text().trimmed();
     if (!(clip.startsWith("http") || clip.startsWith("www.")) || clip.contains('\n') || clip.size() > 2000) clip.clear();
     QList<QPair<QString, QString>> cols{{QString(), QString("📂 No collection")}};
-    for (const auto& c : std::as_const(m_collections)) cols << qMakePair(c.id, (c.emoji + "  " + c.name).trimmed());
+    for (const auto& c : std::as_const(m_collections))
+        if (!c.rule.enabled()) cols << qMakePair(c.id, (c.emoji + "  " + c.name).trimmed());
     m_quickAdd->open(clip, cols, m_collectionFilter);
 }
 
@@ -511,6 +563,8 @@ QList<PaletteItem> MainWindow::paletteQuery(const QString& text) {
             {"add", "+", "Add link", "Ctrl+N"},
             {"quick", "⚡", "Quick add from clipboard", ""},
             {"collection", "📁", "New collection", ""},
+            {"smart", "⚡", "New smart collection", ""},
+            {"notes", "✎", "Open Notes", "Ctrl+Shift+N"},
             {"settings", "⚙", "Settings", "Ctrl+,"},
             {"light", "☀️", "Light theme", ""},
             {"dark", "🌙", "Dark theme", ""},
@@ -612,6 +666,8 @@ void MainWindow::onPaletteActivated(const PaletteItem& item, bool copyOnly) {
     } else if (k == "add") { front(); addBookmark(); }
     else if (k == "quick") { QTimer::singleShot(220, this, [this] { showQuickAdd(); }); }
     else if (k == "collection") { front(); newCollection(); }
+    else if (k == "smart") { front(); editSmartCollection(); }
+    else if (k == "notes") { bringToFront(); openNotes(); }
     else if (k == "settings") { bringToFront(); openSettings(); }
     else if (k == "light" || k == "dark" || k == "black" || k == "system") {
         m_themeMode = k == "light" ? Theme::Light : k == "dark" ? Theme::Dark : k == "black" ? Theme::Black : Theme::System;

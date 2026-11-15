@@ -14,6 +14,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QTextLayout>
+#include <QTextDocument>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantAnimation>
@@ -215,11 +216,13 @@ void BookmarkCard::setBookmark(const Bookmark& b) {
     m_health = b.health;
     m_remindAt = b.remindAt;
     QString tip = b.name + "\n" + b.url;
+    m_hasNote = !b.note.isEmpty();
+    if (m_hasNote) tip += "\n\nNote: " + b.note;
     if (b.health == HealthBroken) tip += QString::fromUtf8("\n⚠️ This page could not be found.");
     else if (b.health == HealthRedirect) tip += QString::fromUtf8("\n↪ Redirected to: ") + b.redirectTo;
     if (b.remindAt > 0)
         tip += QString::fromUtf8("\n⏰ Reminder: ") + QDateTime::fromSecsSinceEpoch(b.remindAt).toString("yyyy/MM/dd  HH:mm");
-    setToolTip(tip);
+    setToolTip(Qt::convertFromPlainText(tip));
 
     if (b.pinned != m_pinned || !m_initialized) {
         m_pinned = b.pinned;
@@ -425,6 +428,7 @@ void BookmarkCard::paintEvent(QPaintEvent*) {
             x += w + 6;
         };
         chip(m_date, c.chip, c.muted);
+        if (m_hasNote) chip(QStringLiteral("✎"), c.chip, c.accent);
         if (m_remindAt > 0) {
             QColor bg = c.accent; bg.setAlpha(m_dark ? 50 : 30);
             chip(QString::fromUtf8("⏰ ") + QDateTime::fromSecsSinceEpoch(m_remindAt).toString("HH:mm"), bg, c.accent);

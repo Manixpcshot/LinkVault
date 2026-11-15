@@ -73,12 +73,13 @@ QScrollArea, QScrollArea > QWidget, #gridHolder, #grid, #emptyBox, #page { backg
 #settingsCard { background: @glass; border: 1px solid @border; border-radius: 18px; }
 #cardTitle { font-size: 15px; font-weight: 700; color: @accent; }
 #rowTitle { font-size: 14px; font-weight: 600; }
+#noteClock { color: @accent; font-size: 21px; font-weight: 700; }
 #sep { background: @border; border: none; }
 #kbd { background: @input; border: 1px solid @border; border-bottom: 2px solid @border; border-radius: 7px;
        padding: 3px 10px; font-size: 12px; font-weight: 600; }
-QLineEdit { background: @input; border: 1px solid @border; border-radius: 12px; padding: 10px 14px;
+QLineEdit, QPlainTextEdit { background: @input; border: 1px solid @border; border-radius: 12px; padding: 10px 14px;
             selection-background-color: @accent; selection-color: white; }
-QLineEdit:focus { border: 1px solid @accent; }
+QLineEdit:focus, QPlainTextEdit:focus { border: 1px solid @accent; }
 QLineEdit#search { background: @glass; border-radius: 14px; padding: 9px 8px; }
 QLineEdit#search:focus { border: 1px solid @accent; background: @input; }
 QPushButton { background: @card; border: 1px solid @border; border-radius: 10px; padding: 9px 16px; }

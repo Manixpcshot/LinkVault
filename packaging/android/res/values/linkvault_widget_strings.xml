@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="linkvault_widget_name">LinkVault Notes</string>
+    <string name="linkvault_widget_description">The selected note and its countdown</string>
+    <string name="linkvault_widget_empty">Add a note in LinkVault</string>
+    <string name="linkvault_widget_finished">Time’s up</string>
+</resources>

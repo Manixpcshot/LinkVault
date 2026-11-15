@@ -2,7 +2,7 @@ name: LinkVault packages
 
 on:
   push:
-    branches: [v4]
+    branches: [v4.1]
   workflow_dispatch:
 
 permissions:
@@ -50,7 +50,7 @@ jobs:
           cp THIRD-PARTY-NOTICES.md AppDir/usr/share/doc/linkvault/
           cp -R packaging/licenses AppDir/usr/share/doc/linkvault/
           export PATH="$PWD/tools:$PATH" QMAKE="$QT_ROOT_DIR/bin/qmake"
-          export OUTPUT=LinkVault-4.0.0-linux-x86_64.AppImage
+          export OUTPUT=LinkVault-4.1.0-linux-x86_64.AppImage
           linuxdeploy-x86_64.AppImage --appdir AppDir --executable build/LinkVault \
             --desktop-file "packaging/linux/$icon.desktop" --icon-file "tools/$icon.png" \
             --plugin qt --output appimage
@@ -87,7 +87,7 @@ jobs:
           app_dmg="$(find . -maxdepth 2 -name LinkVault.dmg -print -quit)"
           test -n "$app_dmg"
           mkdir -p artifacts
-          mv "$app_dmg" artifacts/LinkVault-4.0.0-macos-universal.dmg
+          mv "$app_dmg" artifacts/LinkVault-4.1.0-macos-universal.dmg
           hdiutil verify artifacts/*.dmg
       - uses: actions/upload-artifact@v4
         with:
@@ -127,12 +127,13 @@ jobs:
           apk="$(find build -name '*.apk' -path '*/outputs/apk/*' -print -quit)"
           test -n "$apk"
           mkdir -p artifacts
-          cp "$apk" artifacts/LinkVault-4.0.0-android-arm64.apk
+          cp "$apk" artifacts/LinkVault-4.1.0-android-arm64.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify artifacts/*.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging artifacts/*.apk | tee apk-info.txt
           grep -F "package: name='io.github.manixpcshot.linkvault'" apk-info.txt
           grep -F "native-code: 'arm64-v8a'" apk-info.txt
           grep -F "uses-permission: name='android.permission.INTERNET'" apk-info.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree artifacts/*.apk AndroidManifest.xml | grep -F NotesAppWidget
       - uses: actions/upload-artifact@v4
         with:
           name: LinkVault-Android-APK
@@ -162,10 +163,14 @@ jobs:
           test -n "$app"
           lipo "$app/LinkVault" -verify_arch arm64
           plutil -lint "$app/Info.plist"
+          widget="$app/PlugIns/LinkVaultNotes.appex"
+          test -d "$widget"
+          lipo "$widget/LinkVaultNotes" -verify_arch arm64
+          plutil -lint "$widget/Info.plist"
           cp THIRD-PARTY-NOTICES.md "$app/"
           cp -R packaging/licenses "$app/"
           mkdir -p artifacts
-          ditto -c -k --keepParent "$app" artifacts/LinkVault-4.0.0-ios-arm64-unsigned.zip
+          ditto -c -k --keepParent "$app" artifacts/LinkVault-4.1.0-ios-arm64-unsigned.zip
       - uses: actions/upload-artifact@v4
         with:
           name: LinkVault-iOS-Unsigned

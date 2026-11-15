@@ -1,3 +1,10 @@
+# LinkVault 4.1
+
+- Bookmark notes, searchable in the library and command palette.
+- Smart collections based on keyword, website, and date saved.
+- A notebook with categories, colors, pinned notes, search, and countdowns.
+- Notes widgets on the library page, a floating desktop panel, and Android and iOS home screen widgets.
+
 # LinkVault 4.0
 
 - English desktop and mobile interface, including dialogs, settings, menus, and the Windows installer.

@@ -161,7 +161,7 @@ private:
 class CollectionBar : public QWidget {
     Q_OBJECT
 public:
-    struct Chip { QString id; QString text; QColor color; int count = 0; };
+    struct Chip { QString id; QString text; QColor color; int count = 0; bool acceptsDrop = true; };
     static constexpr const char* kMime = "application/x-linkvault-bookmark";
 
     explicit CollectionBar(QWidget* parent = nullptr);

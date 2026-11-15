@@ -1,4 +1,4 @@
-# LinkVault 4.0
+# LinkVault 4.1
 
 LinkVault is a desktop and mobile bookmark manager built with C++17 and Qt 6. Save a link, group it into a collection, and search your library by title or URL.
 
@@ -6,6 +6,10 @@ LinkVault is a desktop and mobile bookmark manager built with C++17 and Qt 6. Sa
 
 ## What's new
 
+- Save a short note with a bookmark. The library, command palette, and smart collections can search that note.
+- Choose **+ New collection → New smart collection** to save rules by keyword, website, or when a link was added. For example, enter `youtube.com` and choose **This week**. Matching links appear automatically.
+- Open **Notes** on the library page for a separate notebook with categories, search, colors, pinned notes, and countdowns. Specify a deadline or a duration such as **90 minutes**. Select **Show this note in the widget** to choose which note the widgets show.
+- Use **Desktop widget** in Notes to open a floating panel on Windows, Linux, or macOS. On Android and iOS, add **LinkVault Notes** from the system widget picker.
 - English interface for the library, command palette, dialogs, settings, and Windows installer. Bookmark titles and collection names keep their original text.
 - Light, Dark, System, and Black themes. Black uses a pure black workspace with distinct cards and controls. On Windows, the Black theme suspends the Mica background while selected.
 - Shorter page transitions, theme crossfades, card movements, and scrolling. Turn **Animations** off under **Settings → Appearance** to disable these effects.
@@ -22,7 +26,9 @@ LinkVault is a desktop and mobile bookmark manager built with C++17 and Qt 6. Sa
 | iOS 16+ on arm64 | Unsigned app bundle for developers. A device build needs your Apple development identity and provisioning profile. |
 | Windows 10/11 x64 | Inno Setup installer or portable ZIP. Extract the entire ZIP before opening LinkVault.exe. |
 
-The [package workflow](https://github.com/Manixpcshot/LinkVault/actions/workflows/packages.yml?query=branch%3Av4) builds the Linux, macOS, Android, and iOS packages. The macOS build is provided without Apple notarization.
+The [package workflow](https://github.com/Manixpcshot/LinkVault/actions/workflows/packages.yml?query=branch%3Av4.1) builds the Linux, macOS, Android, and iOS packages. The macOS build is provided without Apple notarization.
+
+Standalone notebook entries are stored locally and included in JSON backups. Desktop folder sync carries bookmark notes and smart collection rules. Use LinkVault 4.1 on each device that writes to the same sync folder to preserve those fields. The Android launcher displays a live countdown and the system may defer its final refresh in the background. On iOS, sign `io.github.manixpcshot.linkvault` and `io.github.manixpcshot.linkvault.notes` with the same team, and enable the `group.io.github.manixpcshot.linkvault` App Group on both provisioning profiles. Add the widget after opening the signed app and saving a note.
 
 Windows retains the custom frame, Mica, and system-wide hotkeys. Linux and macOS use native window frames and in-app shortcuts. Close-to-tray requires an available desktop system tray. Folder sync is a desktop feature. Mobile libraries can be moved using **Export** and **Import** in Settings. Mobile reminders are checked while the app runs.
 

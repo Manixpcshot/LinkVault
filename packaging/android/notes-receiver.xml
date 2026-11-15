@@ -1,0 +1,11 @@
+        <receiver android:name="io.github.manixpcshot.linkvault.NotesAppWidget"
+                  android:label="@string/linkvault_widget_name" android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                       android:resource="@xml/linkvault_notes_widget_info" />
+        </receiver>

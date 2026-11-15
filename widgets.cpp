@@ -830,13 +830,15 @@ void CollectionBar::dragEnterEvent(QDragEnterEvent* e) {
 void CollectionBar::dragMoveEvent(QDragMoveEvent* e) {
     if (!e->mimeData()->hasFormat(kMime)) return;
     const int i = hitTest(e->position());
-    if (i != m_drop) { m_drop = i >= 0 ? i : -1; update(); }
+    const bool canDrop = i >= 0 && m_chips[i].acceptsDrop;
+    const int target = canDrop ? i : -1;
+    if (target != m_drop) { m_drop = target; update(); }
     // auto-scroll when dragging near the edges
     const qreal x = e->position().x();
     const qreal dir = isRightToLeft() ? -1 : 1;
     if (x < 30) scrollTo(m_scroll - 60 * dir);
     else if (x > width() - 30) scrollTo(m_scroll + 60 * dir);
-    if (i >= 0) e->acceptProposedAction(); else e->ignore();
+    if (canDrop) e->acceptProposedAction(); else e->ignore();
 }
 
 void CollectionBar::dragLeaveEvent(QDragLeaveEvent* e) { m_drop = -1; update(); QWidget::dragLeaveEvent(e); }
@@ -845,7 +847,7 @@ void CollectionBar::dropEvent(QDropEvent* e) {
     const int i = hitTest(e->position());
     m_drop = -1;
     update();
-    if (i < 0 || !e->mimeData()->hasFormat(kMime)) return;
+    if (i < 0 || !m_chips[i].acceptsDrop || !e->mimeData()->hasFormat(kMime)) return;
     const QString id = QString::fromUtf8(e->mimeData()->data(kMime));
     e->acceptProposedAction();
     emit dropped(id, m_chips[i].id);

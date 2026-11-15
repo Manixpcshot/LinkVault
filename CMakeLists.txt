@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.21)
-project(LinkVault VERSION 4.0.0 LANGUAGES CXX)
+project(LinkVault VERSION 4.1.0 LANGUAGES CXX)
 if(WIN32)
     enable_language(RC)
+endif()
+if(IOS)
+    enable_language(OBJCXX Swift)
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -24,6 +27,7 @@ qt_add_executable(LinkVault WIN32 MACOSX_BUNDLE
     popups.h popups.cpp
     linkchecker.h linkchecker.cpp
     sync.h sync.cpp
+    notebook.h notebook.cpp notebook_ui.cpp
 )
 if(WIN32)
     # exe icon. Built as a separate object lib WITHOUT Qt include dirs:
@@ -34,7 +38,7 @@ endif()
 
 qt_add_resources(LinkVault "assets" PREFIX "/" FILES icon.png)
 target_link_libraries(LinkVault PRIVATE Qt6::Widgets Qt6::Network)
-target_compile_definitions(LinkVault PRIVATE LINKVAULT_VERSION="${PROJECT_VERSION}")
+set_source_files_properties(main.cpp settingspage.cpp PROPERTIES COMPILE_DEFINITIONS "LINKVAULT_VERSION=\"${PROJECT_VERSION}\"")
 if(APPLE)
     set_target_properties(LinkVault PROPERTIES
         MACOSX_BUNDLE_BUNDLE_NAME "LinkVault"
@@ -48,20 +52,28 @@ if(APPLE AND NOT IOS)
     set_source_files_properties(packaging/macos/LinkVault.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
     set_target_properties(LinkVault PROPERTIES MACOSX_BUNDLE_ICON_FILE "LinkVault.icns")
 endif()
+if(IOS)
+    add_subdirectory(packaging/ios)
+endif()
 if(ANDROID)
     get_filename_component(qt_android_prefix "${Qt6_DIR}/../../.." ABSOLUTE)
     set(android_package "${CMAKE_CURRENT_BINARY_DIR}/android-package")
     file(MAKE_DIRECTORY "${android_package}/assets")
-    file(COPY packaging/android/res DESTINATION "${android_package}")
+    file(COPY packaging/android/res packaging/android/src DESTINATION "${android_package}")
     file(COPY packaging/licenses DESTINATION "${android_package}/assets")
     configure_file(THIRD-PARTY-NOTICES.md "${android_package}/assets/THIRD-PARTY-NOTICES.md" COPYONLY)
     file(READ "${qt_android_prefix}/src/android/templates/AndroidManifest.xml" manifest)
     string(REPLACE "<application" "<application android:icon=\"@drawable/linkvault_icon\"" manifest "${manifest}")
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/packaging/android/notes-receiver.xml" notes_receiver)
+    string(REPLACE "</application>" "${notes_receiver}\n    </application>" manifest "${manifest}")
+    string(REPLACE "<!-- %%INSERT_PERMISSIONS -->"
+        "<uses-permission android:name=\"android.permission.RECEIVE_BOOT_COMPLETED\" />\n    <!-- %%INSERT_PERMISSIONS -->"
+        manifest "${manifest}")
     file(WRITE "${android_package}/AndroidManifest.xml" "${manifest}")
     set_target_properties(LinkVault PROPERTIES
         QT_ANDROID_PACKAGE_NAME "io.github.manixpcshot.linkvault"
         QT_ANDROID_VERSION_NAME "${PROJECT_VERSION}"
-        QT_ANDROID_VERSION_CODE 40000
+        QT_ANDROID_VERSION_CODE 40100
         QT_ANDROID_MIN_SDK_VERSION 28
         QT_ANDROID_PACKAGE_SOURCE_DIR "${android_package}"
     )

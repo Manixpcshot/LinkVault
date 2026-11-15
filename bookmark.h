@@ -21,6 +21,7 @@ struct Bookmark {
     QString url;
     QString imagePath;   // cached cover/preview image on disk
     QString iconPath;    // cached favicon on disk
+    QString note;
     qint64  created = 0;
     bool    pinned = false;
     qint64  pinnedAt = 0;
@@ -41,6 +42,7 @@ struct Bookmark {
         o["pinned"] = pinned; o["pinnedAt"] = QString::number(pinnedAt);
         o["visits"] = visits; o["lastOpened"] = QString::number(lastOpened);
         if (!collection.isEmpty()) o["collection"] = collection;
+        if (!note.isEmpty()) o["note"] = note;
         if (modified) o["modified"] = QString::number(modified);
         if (health) o["health"] = health;
         if (!redirectTo.isEmpty()) o["redirectTo"] = redirectTo;
@@ -55,12 +57,27 @@ struct Bookmark {
         b.pinned = o["pinned"].toBool(); b.pinnedAt = o["pinnedAt"].toString().toLongLong();
         b.visits = o["visits"].toInt(); b.lastOpened = o["lastOpened"].toString().toLongLong();
         b.collection = o["collection"].toString();
+        b.note = o["note"].toString();
         b.modified = o["modified"].toString().toLongLong();
         b.health = qBound(0, o["health"].toInt(), 3);
         b.redirectTo = o["redirectTo"].toString();
         b.checkedAt = o["checkedAt"].toString().toLongLong();
         b.remindAt = o["remindAt"].toString().toLongLong();
         return b;
+    }
+};
+
+struct SmartRule {
+    enum Period { AnyTime, Today, ThisWeek, LastSevenDays, LastThirtyDays };
+    QString text;
+    QString domain;
+    Period period = AnyTime;
+
+    bool enabled() const { return !text.isEmpty() || !domain.isEmpty() || period != AnyTime; }
+    QJsonObject toJson() const { return {{"text", text}, {"domain", domain}, {"period", int(period)}}; }
+    static SmartRule fromJson(const QJsonObject& o) {
+        return {o["text"].toString().simplified(), o["domain"].toString().toLower(),
+                Period(qBound(int(AnyTime), o["period"].toInt(), int(LastThirtyDays)))};
     }
 };
 
@@ -71,11 +88,13 @@ struct Collection {
     QString color;        // "#RRGGBB", empty = automatic (brand color of its first site)
     qint64  created = 0;
     qint64  modified = 0;
+    SmartRule rule;
 
     QJsonObject toJson() const {
         QJsonObject o;
         o["id"] = id; o["name"] = name; o["emoji"] = emoji; o["color"] = color;
         o["created"] = QString::number(created); o["modified"] = QString::number(modified);
+        if (rule.enabled()) o["smartRule"] = rule.toJson();
         return o;
     }
     static Collection fromJson(const QJsonObject& o) {
@@ -83,6 +102,7 @@ struct Collection {
         c.id = o["id"].toString(); c.name = o["name"].toString(); c.emoji = o["emoji"].toString();
         c.color = o["color"].toString(); c.created = o["created"].toString().toLongLong();
         c.modified = o["modified"].toString().toLongLong();
+        c.rule = SmartRule::fromJson(o["smartRule"].toObject());
         return c;
     }
 };

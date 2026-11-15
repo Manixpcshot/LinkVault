@@ -10,6 +10,7 @@
 #include "sync.h"
 
 class QLabel;
+class QDateTime;
 class QMenu;
 class QPropertyAnimation;
 class QPushButton;
@@ -32,11 +33,15 @@ class CollectionBar;
 class Toast;
 class GlobalHotkeys;
 class LinkChecker;
+class Notebook;
+class NotesPage;
+class NotesWidget;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
     void bringToFront();
     Q_INVOKABLE void toggleFullScreen();
     void showQuickAdd();
@@ -68,12 +73,15 @@ private:
     // pages / theme
     void openSettings();
     void goHome();
+    void openNotes(const QString& noteId = {}, bool edit = false);
+    void showNotesWidget();
     bool resolveDark() const;
     void applyTheme(bool crossfade);
 
     // actions
     enum class AddResult { Added, Duplicate, Invalid };
-    AddResult addBookmarkData(const QString& url, const QString& name, const QString& collection, QString* outName);
+    AddResult addBookmarkData(const QString& url, const QString& name, const QString& collection, QString* outName,
+                              const QString& note = {});
     void addBookmark();
     void onOpen(const QString& id);
     void onEdit(const QString& id);
@@ -101,6 +109,9 @@ private:
     QColor collectionColor(const QString& id) const;
     QString collectionLabel(const QString& id) const;
     void newCollection(const QString& assignBookmark = {});
+    void chooseCollectionType();
+    void editSmartCollection(const QString& id = {});
+    bool matchesCollection(const Bookmark& bookmark, const Collection& collection, const QDateTime& now) const;
     void editCollection(const QString& id);
     void deleteCollection(const QString& id);
     void moveToCollection(const QString& bookmarkId, const QString& collectionId);
@@ -150,6 +161,9 @@ private:
     QVBoxLayout* m_outer = nullptr;
     SlideStack* m_stack = nullptr;
     SettingsPage* m_settings = nullptr;
+    Notebook* m_notebook = nullptr;
+    NotesPage* m_notesPage = nullptr;
+    NotesWidget* m_desktopNote = nullptr;
     SearchBox* m_search = nullptr;
     QTimer* m_searchTimer = nullptr;
     SegmentedControl* m_filter = nullptr;

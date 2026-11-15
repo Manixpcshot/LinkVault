@@ -54,7 +54,7 @@ public:
     void showError(const QString& text);
 
 signals:
-    void submitted(const QString& url, const QString& name, const QString& collectionId);
+    void submitted(const QString& url, const QString& name, const QString& collectionId, const QString& note);
 
 protected:
     bool eventFilter(QObject* o, QEvent* e) override;
@@ -66,6 +66,7 @@ private:
     QWidget* m_form;
     QLineEdit* m_url;
     QLineEdit* m_name;
+    QLineEdit* m_note;
     QComboBox* m_collection;
     QLabel* m_error;
     QString m_savedName;

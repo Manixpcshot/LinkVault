@@ -2,7 +2,7 @@
 ; Built by build_setup.bat  (or open this file in Inno Setup and press Compile after running build.bat)
 
 #define AppName    "LinkVault"
-#define AppVersion "4.0.0"
+#define AppVersion "4.1.0"
 #define AppExe     "LinkVault.exe"
 #ifndef DistDir
   #define DistDir  "..\dist"

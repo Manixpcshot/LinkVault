@@ -65,6 +65,7 @@ private:
                          const QColor& color, Qt::TextElideMode mode);
 
     QString m_id, m_url, m_name, m_host, m_date;
+    bool m_hasNote = false;
     QStringList m_tokens;
     bool m_dark;
     bool m_loading = false;

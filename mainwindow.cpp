@@ -7,6 +7,7 @@
 #include "theme.h"
 #include "autostart.h"
 #include "platform.h"
+#include "notebook.h"
 #include "widgets.h"
 #include "settingspage.h"
 #include "hotkey.h"
@@ -24,6 +25,7 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
+#include <QLocale>
 #include <QKeyEvent>
 #include <QMenu>
 #include <QMouseEvent>
@@ -130,10 +132,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     else m_titleBar->hide();
 
     m_stack = new SlideStack;
+    m_notebook = new Notebook(this);
     m_outer->addWidget(m_stack, 1);
     m_stack->addPage(buildHome());
     m_settings = new SettingsPage;
     m_stack->addPage(m_settings);
+    m_notesPage = new NotesPage(m_notebook);
+    m_stack->addPage(m_notesPage);
+    connect(m_notesPage, &NotesPage::backRequested, this, &MainWindow::goHome);
+    connect(m_notesPage, &NotesPage::desktopWidgetRequested, this, &MainWindow::showNotesWidget);
     connectSettings();
     setCentralWidget(m_backdrop);
 
@@ -142,14 +149,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_toast, &Toast::timedOut, this, &MainWindow::commitPendingDelete);
 
     // ---- shortcuts ----
-    new QShortcut(QKeySequence::New, this, [this] { goHome(); addBookmark(); });
+    new QShortcut(QKeySequence::New, this, [this] {
+        if (m_stack->current() == 2) m_notesPage->openEditor();
+        else { goHome(); addBookmark(); }
+    });
+    new QShortcut(QKeySequence("Ctrl+Shift+N"), this, [this] { openNotes(); });
     new QShortcut(QKeySequence::Find, this, [this] { goHome(); m_search->setFocus(); m_search->selectAll(); });
     new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma), this, [this] {
         if (m_stack->current() == 1) goHome(); else openSettings();
     });
     new QShortcut(QKeySequence::Undo, this, [this] { if (!m_search->hasFocus()) undoDelete(); });
     new QShortcut(QKeySequence(Qt::Key_Escape), this, [this] {
-        if (m_stack->current() == 1) { goHome(); return; }
+        if (m_stack->current() != 0) { goHome(); return; }
         if (!m_search->text().isEmpty()) m_search->clear();
         else if (m_search->hasFocus()) m_search->clearFocus();
         else if (isFullScreen()) toggleFullScreen();
@@ -193,6 +204,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_reminderTimer = new QTimer(this);
     m_reminderTimer->setInterval(20000);
     connect(m_reminderTimer, &QTimer::timeout, this, &MainWindow::checkReminders);
+    connect(m_reminderTimer, &QTimer::timeout, this, [this] {
+        const bool timedRules = std::any_of(m_collections.cbegin(), m_collections.cend(),
+            [](const Collection& collection) { return collection.rule.period != SmartRule::AnyTime; });
+        if (timedRules) { refreshCollections(); refresh(false); }
+    });
     m_reminderTimer->start();
 
     m_materialTimer = new QTimer(this);
@@ -201,9 +217,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_materialTimer, &QTimer::timeout, this, &MainWindow::updateMaterial);
 
     m_quickAdd = new QuickAddPanel;
-    connect(m_quickAdd, &QuickAddPanel::submitted, this, [this](const QString& url, const QString& name, const QString& col) {
+    connect(m_quickAdd, &QuickAddPanel::submitted, this, [this](const QString& url, const QString& name,
+                                                               const QString& col, const QString& note) {
         QString shown;
-        const AddResult r = addBookmarkData(url, name, col, &shown);
+        const AddResult r = addBookmarkData(url, name, col, &shown, note);
         if (r == AddResult::Added) m_quickAdd->showSaved(shown);
         else if (r == AddResult::Duplicate) m_quickAdd->showError(QString("“%1” is already saved").arg(shown));
         else m_quickAdd->showError("Enter a valid web address.");
@@ -219,6 +236,16 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     applyHotkeys(false);
     setupTray();
+    connect(m_notebook, &Notebook::countdownFinished, this, [this](const QString& title) {
+        if (m_tray && m_tray->isVisible() && QSystemTrayIcon::supportsMessages()) {
+            m_lastNotified.clear();
+            m_tray->showMessage("LinkVault · Time’s up", title, QSystemTrayIcon::Information, 9000);
+        } else {
+            showToast(QString("Time’s up · %1").arg(title), 4200);
+        }
+    });
+    if (!Platform::mobile && st.value("desktopNoteVisible", false).toBool())
+        QTimer::singleShot(0, this, &MainWindow::showNotesWidget);
 
     m_sync = new SyncManager(this);
     m_sync->setProvider([this] { return syncSnapshot(); });
@@ -237,6 +264,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     refreshCollections();
     applyTheme(false);
 }
+
+MainWindow::~MainWindow() { delete m_desktopNote; }
 
 QWidget* MainWindow::buildHome() {
     auto* page = new QWidget;
@@ -308,13 +337,18 @@ QWidget* MainWindow::buildHome() {
         refresh(true);
         smoothScrollTo(0);
     });
-    connect(m_colBar, &CollectionBar::addRequested, this, [this] { newCollection(); });
+    connect(m_colBar, &CollectionBar::addRequested, this, &MainWindow::chooseCollectionType);
     connect(m_colBar, &CollectionBar::dropped, this, &MainWindow::moveToCollection, Qt::QueuedConnection);
     connect(m_colBar, &CollectionBar::menuRequested, this, &MainWindow::showCollectionMenu);
     auto* colRow = new QHBoxLayout;
     colRow->setContentsMargins(0, 0, 0, 0);
     colRow->addWidget(m_colBar);
     root->addLayout(colRow);
+
+    auto* notesWidget = new NotesWidget(m_notebook, false);
+    connect(notesWidget, &NotesWidget::notebookRequested, this, [this] { openNotes(); });
+    connect(notesWidget, &NotesWidget::openRequested, this, [this](const QString& id) { openNotes(id, true); });
+    root->addWidget(notesWidget);
 
     // ---- filter / sort row ----
     auto* bar = new QHBoxLayout;
@@ -524,6 +558,11 @@ void MainWindow::toggleFullScreen() {
 void MainWindow::closeEvent(QCloseEvent* e) {
     commitPendingDelete();
     QSettings().setValue("geometry", saveGeometry());
+    if (!m_quitting && m_desktopNote && m_desktopNote->isVisible()) {
+        e->ignore();
+        hide();
+        return;
+    }
     if (m_closeToTray && !m_quitting && m_tray && m_tray->isVisible()) {
         e->ignore();
         hide();                                    // DWM still plays the close-style hide animation
@@ -547,7 +586,7 @@ void MainWindow::moveEvent(QMoveEvent* e) {
 
 void MainWindow::keyPressEvent(QKeyEvent* e) {
     if (Platform::mobile && e->key() == Qt::Key_Back) {
-        if (m_stack->current() == 1) {
+        if (m_stack->current() != 0) {
             goHome();
             return;
         }
@@ -804,6 +843,35 @@ void MainWindow::openSettings() {
 
 void MainWindow::goHome() { m_stack->slideTo(0); }
 
+void MainWindow::openNotes(const QString& noteId, bool edit) {
+    const bool transition = m_stack->current() != 2;
+    m_stack->slideTo(2);
+    if (edit) QTimer::singleShot(transition && Theme::animations() ? 280 : 0, m_notesPage,
+        [page = m_notesPage, noteId] { page->openEditor(noteId); });
+}
+
+void MainWindow::showNotesWidget() {
+    if (Platform::mobile) return;
+    if (!m_desktopNote) {
+        m_desktopNote = new NotesWidget(m_notebook, true);
+        m_desktopNote->setWindowFlags(Qt::Window | Qt::WindowStaysOnTopHint);
+        m_desktopNote->setAttribute(Qt::WA_QuitOnClose, false);
+        m_desktopNote->restoreGeometry(QSettings().value("desktopNoteGeometry").toByteArray());
+        connect(m_desktopNote, &NotesWidget::notebookRequested, this, [this] { bringToFront(); openNotes(); });
+        connect(m_desktopNote, &NotesWidget::openRequested, this, [this](const QString& id) {
+            bringToFront(); openNotes(id, true);
+        });
+        connect(m_desktopNote, &NotesWidget::closed, this, [this] {
+            QSettings().setValue("desktopNoteGeometry", m_desktopNote->saveGeometry());
+            QSettings().setValue("desktopNoteVisible", false);
+            if (!isVisible() && (!m_closeToTray || !m_tray)) quitApp();
+        });
+    }
+    QSettings().setValue("desktopNoteVisible", true);
+    m_desktopNote->show();
+    m_desktopNote->raise();
+}
+
 void MainWindow::smoothScrollTo(int value) {
     QScrollBar* sb = m_scroll->verticalScrollBar();
     if (m_scrollMotion) m_scrollMotion->stop();
@@ -858,6 +926,7 @@ int MainWindow::indexOf(const QString& id) const {
 int MainWindow::matchScore(const Bookmark& b, const QStringList& tokens) const {
     if (tokens.isEmpty()) return 0;
     const QString name = norm(b.name), url = norm(b.url);
+    const QString note = norm(b.note);
     QString host = norm(QUrl(b.url).host());
     if (host.startsWith("www.")) host = host.mid(4);
     int total = 0;
@@ -868,10 +937,32 @@ int MainWindow::matchScore(const Bookmark& b, const QStringList& tokens) const {
         else if (host.startsWith(t)) s = 20;
         else if (host.contains(t)) s = 12;
         else if (url.contains(t)) s = 5;
+        else if (note.contains(t)) s = 3;
         if (s < 0) return -1;
         total += s;
     }
     return total;
+}
+
+bool MainWindow::matchesCollection(const Bookmark& bookmark, const Collection& collection, const QDateTime& now) const {
+    const auto& rule = collection.rule;
+    if (!rule.enabled()) return bookmark.collection == collection.id;
+    if (!rule.domain.isEmpty()) {
+        const QString host = QUrl(bookmark.url).host().toLower();
+        if (host != rule.domain && !host.endsWith("." + rule.domain)) return false;
+    }
+    if (rule.period != SmartRule::AnyTime) {
+        const QDateTime created = QDateTime::fromSecsSinceEpoch(bookmark.created);
+        if (bookmark.created <= 0 || created > now) return false;
+        if (rule.period == SmartRule::Today && created.date() != now.date()) return false;
+        if (rule.period == SmartRule::ThisWeek) {
+            const int offset = (now.date().dayOfWeek() - int(QLocale().firstDayOfWeek()) + 7) % 7;
+            if (created.date() < now.date().addDays(-offset)) return false;
+        }
+        if (rule.period == SmartRule::LastSevenDays && created < now.addDays(-7)) return false;
+        if (rule.period == SmartRule::LastThirtyDays && created < now.addDays(-30)) return false;
+    }
+    return matchScore(bookmark, norm(rule.text).split(' ', Qt::SkipEmptyParts)) >= 0;
 }
 
 BookmarkCard* MainWindow::ensureCard(const Bookmark& b) {
@@ -899,11 +990,12 @@ void MainWindow::refresh(bool animate) {
     struct Row { int idx; int score; };
     QList<Row> pinned, others;
     int pinnedTotal = 0, problemTotal = 0, inScope = 0;
-    for (const Bookmark& b : std::as_const(m_items))
-        if (m_collectionFilter.isEmpty() || b.collection == m_collectionFilter) ++inScope;
+    const int collection = collectionIndex(m_collectionFilter);
+    const auto now = QDateTime::currentDateTime();
     for (int i = 0; i < m_items.size(); ++i) {
         const Bookmark& b = m_items[i];
-        if (!m_collectionFilter.isEmpty() && b.collection != m_collectionFilter) continue;
+        if (collection >= 0 && !matchesCollection(b, m_collections[collection], now)) continue;
+        ++inScope;
         if (b.pinned) ++pinnedTotal;
         if (b.health == HealthBroken || b.health == HealthRedirect) ++problemTotal;
         if (m_filterMode == 1 && !b.pinned) continue;
@@ -966,8 +1058,11 @@ void MainWindow::refresh(bool animate) {
             m_emptyText->setText("Try another word or part of the URL.");
         } else if (inScope == 0) {
             m_emptyTitle->setText(QString("“%1” is empty").arg(collectionLabel(m_collectionFilter)));
-            m_emptyText->setText(Platform::mobile ? "Use a bookmark’s menu to move it to this collection."
-                                                 : "Drag a card here or choose Move to collection from its menu.");
+            if (collection >= 0 && m_collections[collection].rule.enabled())
+                m_emptyText->setText("No bookmarks match this smart collection’s rules.");
+            else
+                m_emptyText->setText(Platform::mobile ? "Use a bookmark’s menu to move it to this collection."
+                                                     : "Drag a card here or choose Move to collection from its menu.");
         } else if (m_filterMode == 2) {
             m_emptyTitle->setText("All links are healthy");
             m_emptyText->setText("No broken or redirected links were found.");
@@ -992,7 +1087,7 @@ void MainWindow::refresh(bool animate) {
 // ============================== actions ==============================
 
 MainWindow::AddResult MainWindow::addBookmarkData(const QString& rawUrl, const QString& name,
-                                                  const QString& collection, QString* outName) {
+                                                  const QString& collection, QString* outName, const QString& note) {
     const QUrl u = parseUserUrl(rawUrl);
     if (!isWebUrl(u)) return AddResult::Invalid;
     const QString url = u.toString();
@@ -1008,7 +1103,9 @@ MainWindow::AddResult MainWindow::addBookmarkData(const QString& rawUrl, const Q
     b.url = url;
     b.created = QDateTime::currentSecsSinceEpoch();
     b.name = name;
-    b.collection = collectionIndex(collection) >= 0 ? collection : QString();
+    b.note = note;
+    const int slot = collectionIndex(collection);
+    b.collection = slot >= 0 && !m_collections[slot].rule.enabled() ? collection : QString();
     if (b.name.isEmpty()) { b.name = QUrl(b.url).host(); m_autoName.insert(b.id); }
     if (outName) *outName = b.name;
 
@@ -1019,8 +1116,10 @@ MainWindow::AddResult MainWindow::addBookmarkData(const QString& rawUrl, const Q
     m_search->clear();                         // make sure the new card is visible
     m_search->blockSignals(false);
     if (m_filterMode != 0) { m_filterMode = 0; m_filter->setCurrent(0); }
-    if (!m_collectionFilter.isEmpty() && m_collectionFilter != b.collection) {
+    const int active = collectionIndex(m_collectionFilter);
+    if (active >= 0 && !matchesCollection(b, m_collections[active], QDateTime::currentDateTime())) {
         m_collectionFilter.clear();
+        QSettings().remove("collectionFilter");
         m_colBar->setCurrent({});
     }
     m_loading.insert(b.id);
@@ -1041,7 +1140,7 @@ void MainWindow::addBookmark() {
     if (d.exec() != QDialog::Accepted) return;
     QString shown;
     // new links land in the collection you're looking at
-    if (addBookmarkData(d.url(), d.name(), m_collectionFilter, &shown) == AddResult::Duplicate) {
+    if (addBookmarkData(d.url(), d.name(), m_collectionFilter, &shown, d.note()) == AddResult::Duplicate) {
         m_search->setText(shown);           // show the existing one instead of a duplicate
         showToast(QString("“%1” is already saved").arg(shown), 3000);
     }
@@ -1082,17 +1181,19 @@ void MainWindow::onEdit(const QString& id) {
     const int i = indexOf(id);
     if (i < 0) return;
     const Bookmark before = m_items[i];
-    BookmarkDialog d(this, "Edit bookmark", before.url, before.name);
+    BookmarkDialog d(this, "Edit bookmark", before.url, before.name, before.note);
     if (d.exec() != QDialog::Accepted) return;
 
     const int j = indexOf(id);          // list may have changed while dialog was open
     if (j < 0) return;
     const bool urlChanged = d.url() != before.url;
     m_items[j].url = d.url();
+    m_items[j].note = d.note();
     if (d.name().isEmpty()) { m_items[j].name = QUrl(d.url()).host(); m_autoName.insert(id); }
     else { m_items[j].name = d.name(); m_autoName.remove(id); }
     persist();
     if (auto* c = m_cards.value(id)) c->setBookmark(m_items[j]);
+    refreshCollections();
     refresh(true);
     if (urlChanged || d.name().isEmpty()) startFetch(id);
 }
@@ -1160,7 +1261,8 @@ void MainWindow::exportData() {
     QJsonArray collections;
     for (const auto& collection : std::as_const(m_collections)) collections.append(collection.toJson());
     const QJsonDocument backup(QJsonObject{{"format", "LinkVault"}, {"version", 1},
-                                           {"bookmarks", bookmarks}, {"collections", collections}});
+                                           {"bookmarks", bookmarks}, {"collections", collections},
+                                           {"notebook", m_notebook->backup()}});
     bool ok = false;
     if (file.isLocalFile()) {
         ok = Storage::writeJson(file.toLocalFile(), backup);
@@ -1170,11 +1272,12 @@ void MainWindow::exportData() {
         ok = output.open(QIODevice::WriteOnly | QIODevice::Truncate)
              && output.write(bytes) == bytes.size() && output.flush();
     }
-    showToast(ok ? QString("✓ Exported bookmarks: %1").arg(m_items.size()) : QString("Could not save the file."), 3000);
+    showToast(ok ? QString("✓ Backed up %1 bookmarks and %2 notes").arg(m_items.size()).arg(m_notebook->notes().size())
+                 : QString("Could not save the file."), 3000);
 }
 
 void MainWindow::importData() {
-    const QUrl file = QFileDialog::getOpenFileUrl(this, "Import bookmarks", QUrl::fromLocalFile(QDir::homePath()),
+    const QUrl file = QFileDialog::getOpenFileUrl(this, "Import backup or bookmarks", QUrl::fromLocalFile(QDir::homePath()),
         "LinkVault or browser bookmarks (*.json *.html *.htm)");
     if (file.isEmpty()) return;
     QFile f(file.isLocalFile() ? file.toLocalFile() : file.toString(QUrl::FullyEncoded));
@@ -1183,6 +1286,7 @@ void MainWindow::importData() {
 
     QList<Bookmark> incoming;
     QList<Collection> incomingCollections;
+    bool restoredNotes = false;
     const QByteArray start = data.left(4096).trimmed();
     if (file.path().endsWith(".json", Qt::CaseInsensitive) || start.startsWith('[') || start.startsWith('{')) {
         const QJsonDocument doc = QJsonDocument::fromJson(data);
@@ -1197,6 +1301,14 @@ void MainWindow::importData() {
                 return;
             }
             bookmarks = obj.value("bookmarks").toArray();
+            if (obj.contains("notebook")) {
+                const auto notebook = obj.value("notebook");
+                if (!notebook.isObject() || !m_notebook->restore(notebook.toObject())) {
+                    showToast("Could not restore notes from this backup.", 3200);
+                    return;
+                }
+                restoredNotes = true;
+            }
             for (const auto& value : obj.value("collections").toArray())
                 incomingCollections << Collection::fromJson(value.toObject());
         }
@@ -1239,19 +1351,24 @@ void MainWindow::importData() {
         b.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         b.imagePath.clear();
         b.iconPath.clear();
-        if (collectionIndex(b.collection) < 0) b.collection.clear();
+        const int collection = collectionIndex(b.collection);
+        if (collection < 0 || m_collections[collection].rule.enabled()) b.collection.clear();
         if (b.name.isEmpty()) b.name = u.host();
         if (b.created <= 0) b.created = now;
         m_items.append(b);
         added << b.id;
     }
-    if (added.isEmpty() && !collectionsAdded) { showToast("No new bookmarks or collections to import.", 3000); return; }
+    if (added.isEmpty() && !collectionsAdded) {
+        showToast(restoredNotes ? "✓ Notes backup imported" : "No new bookmarks or collections to import.", 3000);
+        return;
+    }
     persist();
     for (const auto& id : std::as_const(added)) m_loading.insert(id);
     refreshCollections();
     refresh(false);
     for (const auto& id : std::as_const(added)) startFetch(id);
-    showToast(QString("✓ Imported: %1 bookmarks · %2 collections").arg(added.size()).arg(collectionsAdded), 3000);
+    showToast(QString("✓ Imported: %1 bookmarks · %2 collections").arg(added.size()).arg(collectionsAdded)
+                  + (restoredNotes ? QStringLiteral(" · Notes restored") : QString()), 3000);
 }
 
 // ============================== thumbnails ==============================
@@ -1282,12 +1399,17 @@ void MainWindow::onFetched(const QString& id, const QString& cover, const QStrin
     if (i < 0) return;                  // deleted before the download finished
     if (!cover.isEmpty()) m_items[i].imagePath = cover;
     if (!icon.isEmpty()) m_items[i].iconPath = icon;
-    if (m_autoName.contains(id) && !title.isEmpty()) m_items[i].name = title;
+    const bool titleChanged = m_autoName.contains(id) && !title.isEmpty() && m_items[i].name != title;
+    if (titleChanged) m_items[i].name = title;
     m_autoName.remove(id);
     persist();
     // update only this card: rebuilding here could delete a card whose menu is open
     if (auto* c = m_cards.value(id)) {
         c->setBookmark(m_items[i]);
         c->setLoading(false);
+    }
+    if (titleChanged) {
+        refreshCollections();
+        refresh(false);
     }
 }
