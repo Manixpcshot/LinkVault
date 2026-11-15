@@ -1,0 +1,9 @@
+# Windows distribution notices
+
+LinkVault uses the dynamically linked Qt 6.8.3 libraries (Qt Core, GUI, Widgets, Network and SVG, including runtime plugins). Qt is copyright The Qt Company Ltd. and other contributors. The Qt libraries are provided under LGPL-3.0. The Windows package contains the LGPL-3.0 and GPL-3.0 license texts and upstream QtBase and Qt SVG software bills of materials with component license and copyright information under `licenses/Qt`.
+
+The corresponding source for QtBase and Qt SVG 6.8.3 is attached to the [v3.0 release](https://github.com/Manixpcshot/LinkVault/releases/tag/v3.0) and available from the [Qt 6.8.3 source archive](https://download.qt.io/archive/qt/6.8/6.8.3/submodules/). To use a modified compatible Qt build, extract the portable distribution into a writable folder and replace the Qt DLLs and plugins with the corresponding Qt libraries built for Windows x64 with MinGW. Launch `LinkVault.exe` from that folder. Qt may be modified and reverse engineering for debugging such modifications is permitted under the LGPL.
+
+GCC 13.1.0 and MinGW-w64 11.0.0 provide the GCC, C++ and winpthreads runtime DLLs. The Windows package includes their license files, including the GCC Runtime Library Exception, under `licenses/`. Sources are available from [GCC 13.1.0](https://ftp.gnu.org/gnu/gcc/gcc-13.1.0/) and [MinGW-w64 11.0.0](https://sourceforge.net/projects/mingw-w64/files/mingw-w64/mingw-w64-release/).
+
+The software OpenGL fallback, `opengl32sw.dll`, is Mesa llvmpipe 11.2.2 from the Qt toolchain. Refer to the included [Mesa and LLVM attributions](https://doc.qt.io/qtcreator/qtcreator-binary-attribution-llvmpipe.html) and the [Qt build instructions and source links](https://wiki.qt.io/MesaLlvmpipe). The deployment also includes Microsoft's Direct3D shader compiler runtime, `D3Dcompiler_47.dll`.
