@@ -527,7 +527,7 @@ QList<PaletteItem> MainWindow::paletteQuery(const QString& text) {
         const QStringList tokens = normQ(text.mid(1)).simplified().split(' ', Qt::SkipEmptyParts);
         for (const Cmd& c : cmds) {
             const QString key = QString::fromLatin1(c.key);
-            if ((key == "mica" && !micaSupported()) || (Platform::mobile && (key == "folder" || key == "quit")))
+            if ((key == "mica" && !micaSupported()) || (Platform::mobile && (key == "folder" || key == "quit" || key == "sync")))
                 continue;
             const QString title = QString::fromUtf8(c.title);
             const QString hay = normQ(title + " " + QString::fromLatin1(c.key));

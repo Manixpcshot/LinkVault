@@ -1,4 +1,5 @@
 #pragma once
+#include <QElapsedTimer>
 #include <QAbstractButton>
 #include <QHash>
 #include <QLineEdit>
@@ -179,6 +180,7 @@ signals:
 protected:
     void paintEvent(QPaintEvent*) override;
     void mousePressEvent(QMouseEvent*) override;
+    void mouseReleaseEvent(QMouseEvent*) override;
     void mouseMoveEvent(QMouseEvent*) override;
     void leaveEvent(QEvent*) override;
     void wheelEvent(QWheelEvent*) override;
@@ -203,6 +205,9 @@ private:
     QRectF m_addRect;
     qreal m_contentW = 0;
     qreal m_scroll = 0;
+    qreal m_pressX = 0, m_pressScroll = 0;
+    QElapsedTimer m_touchPress;
+    bool m_touchDrag = false;
     int m_cur = 0, m_hover = -1, m_drop = -1;
     QRectF m_indFrom, m_indTo;
     qreal m_indT = 1;

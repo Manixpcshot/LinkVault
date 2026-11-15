@@ -48,6 +48,7 @@ protected:
     void changeEvent(QEvent* e) override;
     void showEvent(QShowEvent* e) override;
     void moveEvent(QMoveEvent* e) override;
+    void keyPressEvent(QKeyEvent* e) override;
     bool nativeEvent(const QByteArray& eventType, void* message, qintptr* result) override;
 
 private:

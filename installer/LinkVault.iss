@@ -2,7 +2,7 @@
 ; Built by build_setup.bat  (or open this file in Inno Setup and press Compile after running build.bat)
 
 #define AppName    "LinkVault"
-#define AppVersion "3.0"
+#define AppVersion "4.0.0"
 #define AppExe     "LinkVault.exe"
 #ifndef DistDir
   #define DistDir  "..\dist"
@@ -14,7 +14,7 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher=maniXpc
-VersionInfoVersion={#AppVersion}.0.0
+VersionInfoVersion={#AppVersion}.0
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
@@ -41,7 +41,7 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "autostart"; Description: "اجرای خودکار با روشن شدن ویندوز (Run at startup)"; GroupDescription: "Other:"; Flags: unchecked
+Name: "autostart"; Description: "Run when I sign in"; GroupDescription: "Other:"; Flags: unchecked
 
 [Files]
 Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -64,8 +64,7 @@ begin
     { the app can add itself to startup from its settings page; always clean that up }
     RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'LinkVault');
     if (not UninstallSilent) and
-       (MsgBox('لینک‌ها و تنظیمات ذخیره‌شده هم پاک بشن؟' + #13#10 +
-               'Also delete your saved links, thumbnails and settings?',
+       (MsgBox('Also delete your saved links, thumbnails and settings?',
                mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES) then
     begin
       DelTree(ExpandConstant('{userappdata}\LinkVault'), True, True, True);

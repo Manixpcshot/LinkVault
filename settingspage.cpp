@@ -115,7 +115,9 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
     m_linkStatus = addRow(body, "Manual check", QString(), checkNow);
 
     // ---- sync ----
-    cl->addWidget(makeCard("☁️ Folder sync", &body));
+    auto* syncCard = makeCard("☁️ Folder sync", &body);
+    cl->addWidget(syncCard);
+    syncCard->setVisible(!Platform::mobile);
     auto* syncBtns = new QWidget;
     auto* sb = new QHBoxLayout(syncBtns);
     sb->setContentsMargins(0, 0, 0, 0);
@@ -142,7 +144,7 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
     m_stats->parentWidget()->setVisible(!Platform::mobile);
     auto* exp = button("Export");
     connect(exp, &QPushButton::clicked, this, &SettingsPage::exportRequested);
-    addRow(body, "Backup", "Save your library to a JSON file.", exp);
+    addRow(body, "Backup", "Save bookmarks and collections to a JSON file.", exp);
     auto* imp = button("Import");
     connect(imp, &QPushButton::clicked, this, &SettingsPage::importRequested);
     addRow(body, "Import bookmarks", "Import from a LinkVault backup or a browser bookmarks HTML file.", imp);

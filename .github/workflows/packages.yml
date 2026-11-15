@@ -25,7 +25,6 @@ jobs:
       - uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          archives: qtbase qtsvg qtwayland
           cache: true
       - name: Install dependencies
         run: |
@@ -77,7 +76,7 @@ jobs:
         run: |
           qt-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64'
           cmake --build build --parallel
-          lipo -verify_arch arm64 x86_64 build/LinkVault.app/Contents/MacOS/LinkVault
+          lipo build/LinkVault.app/Contents/MacOS/LinkVault -verify_arch arm64 x86_64
           cp THIRD-PARTY-NOTICES.md build/LinkVault.app/Contents/Resources/
           macdeployqt build/LinkVault.app -dmg -always-overwrite
           app_dmg="$(find . -maxdepth 2 -name LinkVault.dmg -print -quit)"
@@ -101,12 +100,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: android-actions/setup-android@v3
       - uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
           target: android
           arch: android_arm64_v8a
-          archives: qtbase qtsvg
           cache: true
       - name: Install Android build tools
         run: sdkmanager 'ndk;26.1.10909125' 'platforms;android-35' 'build-tools;35.0.0'
@@ -153,7 +152,7 @@ jobs:
             -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
           app="$(find build -type d -name LinkVault.app -print -quit)"
           test -n "$app"
-          lipo -verify_arch arm64 "$app/LinkVault"
+          lipo "$app/LinkVault" -verify_arch arm64
           plutil -lint "$app/Info.plist"
           cp THIRD-PARTY-NOTICES.md "$app/"
           mkdir -p artifacts

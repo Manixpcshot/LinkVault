@@ -1,39 +1,40 @@
-# LinkVault 3.0
+# LinkVault 4.0
 
-مدیر بوکمارک دسکتاپ برای ویندوز با رابط فارسی و راست‌به‌چپ، ساخته‌شده با C++17 و Qt 6. لینک‌ها را ذخیره کنید، در کالکشن‌ها بچینید و با جست‌وجو یا پالت فرمان دوباره پیدایشان کنید.
+LinkVault is a desktop and mobile bookmark manager built with C++17 and Qt 6. Save a link, group it into a collection, and search your library by title or URL.
 
-[دانلود نسخهٔ ویندوز](https://github.com/Manixpcshot/LinkVault/releases/tag/v3.0) · [تغییرات نسخه‌ها](CHANGES.md)
+## What's new
 
-![کتابخانهٔ LinkVault در حالت شب، با کالکشن‌ها و لینک‌های سنجاق‌شده](docs/screenshots/library.png)
+- English interface for the library, command palette, dialogs, settings, and Windows installer. Bookmark titles and collection names keep their original text.
+- Light, Dark, System, and Black themes. Black uses a pure black workspace with distinct cards and controls. On Windows, the Black theme suspends the Mica background while selected.
+- Shorter page transitions, theme crossfades, card movements, and scrolling. Turn **Animations** off under **Settings → Appearance** to disable these effects.
+- Touch layouts for phones and tablets with swipeable collections, tap targets for pinning and bookmark menus, and scrolling in the library and settings. To edit a collection on a touch screen, press and hold its chip.
+- JSON backups include collections and bookmarks. LinkVault 4 can still import older LinkVault JSON backups and browser-exported bookmarks in HTML format.
 
-## امکانات
+## Packages
 
-- **کالکشن‌ها و سنجاق‌کردن** — کارت‌ها را با کشیدن و رها کردن به کالکشن منتقل کنید و لینک‌های پرکاربرد را بالای فهرست نگه دارید.
-- **جست‌وجو و پیش‌نمایش** — در عنوان و آدرس لینک‌ها جست‌وجو کنید. برنامه، در صورت دسترسی، عنوان و تصویر یا آیکن سایت را دریافت می‌کند.
-- **میانبرهای سراسری** — با `Ctrl+Alt+L` پنجرهٔ افزودن سریع و با `Ctrl+Alt+K` پالت فرمان را از هر جای ویندوز باز کنید. `Ctrl+K` پالت را داخل برنامه باز می‌کند.
-- **بررسی سلامت و یادآوری** — لینک‌های خراب یا منتقل‌شده را پیدا کنید و برای مطالعهٔ دوبارهٔ لینک‌ها یادآور بگذارید.
-- **پشتیبان‌گیری و همگام‌سازی** — بوکمارک مرورگر را از فایل HTML وارد کنید، خروجی و پشتیبان بگیرید یا پوشه‌ای مشترک در OneDrive، Google Drive یا Dropbox انتخاب کنید.
-- **ظاهر و رفتار پنجره** — تم روشن، تیره و هماهنگ با سیستم، پس‌زمینهٔ شیشه‌ای به سبک Mica، Snap Layouts ویندوز ۱۱ و اجرا در System Tray.
+| Platform | Package |
+| --- | --- |
+| Linux x86_64 | AppImage. Make the file executable and run it. |
+| macOS Apple Silicon and Intel | Universal DMG. Drag the app into Applications. |
+| Android 9+ on arm64 | APK. The preview build uses Android test signing. |
+| iOS 16+ on arm64 | Unsigned app bundle for developers. A device build needs your Apple development identity and provisioning profile. |
+| Windows 10/11 x64 | Inno Setup installer or portable ZIP. Extract the entire ZIP before opening LinkVault.exe. |
 
-![پالت فرمان LinkVault با نتایج جست‌وجو و میانبرها](docs/screenshots/command-palette.png)
+The [package workflow](https://github.com/Manixpcshot/LinkVault/actions/workflows/packages.yml?query=branch%3Av4) builds the Linux, macOS, Android, and iOS packages. The macOS build is provided without Apple notarization.
 
-## نصب و اجرا
+Windows retains the custom frame, Mica, and system-wide hotkeys. Linux and macOS use native window frames and in-app shortcuts. Close-to-tray requires an available desktop system tray. Folder sync is a desktop feature. Mobile libraries can be moved using **Export** and **Import** in Settings. Mobile reminders are checked while the app runs.
 
-نسخهٔ ویندوز برای **Windows 10 و 11، نسخهٔ ۶۴ بیتی (x64)** بسته‌بندی شده است.
+## Build from source
 
-- **نصاب** — فایل `LinkVault-Setup-3.0.exe` را اجرا کنید.
-- **نسخهٔ قابل‌حمل** — فایل `LinkVault-3.0-windows-x64-portable.zip` را کامل استخراج کنید و `LinkVault.exe` را از همان پوشه باز کنید. داده‌های این نسخه هم در پوشهٔ داده‌های کاربر ویندوز ذخیره می‌شوند.
+Use Qt 6.8.3, a C++17 toolchain, CMake 3.21 or newer, and Ninja. From a shell configured for your Qt kit:
 
-## ساخت از سورس
+```sh
+qt-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+```
 
-برای ساخت همین نسخه، Qt 6.8.3 با MinGW 64-bit، به‌همراه CMake و Ninja را نصب کنید. فایل `CMakeLists.txt` را در Qt Creator باز کنید یا `build.bat` را اجرا کنید. خروجی قابل اجرا و DLLهای موردنیاز در `dist` قرار می‌گیرند.
+On Windows, run `build.bat` to build and deploy the app into `dist`, or `build_setup.bat` with Inno Setup 6 to build the installer. On Linux and macOS see the commands in [the package workflow](.github/workflows/packages.yml). Android needs the Qt arm64 kit, host Qt, JDK 17, the Android SDK, and NDK r26b. The iOS workflow uses the Qt iOS kit and Xcode.
 
-برای ساخت نصاب، Inno Setup 6 را نصب کنید و `build_setup.bat` را اجرا کنید. خروجی در `Setup\LinkVault-Setup-3.0.exe` ساخته می‌شود.
+Existing Windows installations use the same data directory and settings identifiers as LinkVault 3.0. Bookmarks stay in the application data directory until you export a backup or enable desktop folder sync.
 
-## ساختار کد
-
-- `main.cpp` نمونهٔ یکتای برنامه را راه‌اندازی می‌کند و `mainwindow.cpp` و `mainwindow_v3.cpp` کتابخانه، جست‌وجو، کالکشن‌ها و تنظیمات را مدیریت می‌کنند.
-- `bookmark.h` مدل داده و ذخیره‌سازی JSON را تعریف می‌کند. `fetcher.cpp` پیش‌نمایش‌ها را دریافت می‌کند و `linkchecker.cpp` وضعیت لینک‌ها را بررسی می‌کند.
-- `popups.cpp` و `hotkey.cpp` پنجره‌های افزودن سریع و پالت فرمان و میانبرهای سراسری را پیاده‌سازی می‌کنند. `sync.cpp` داده‌ها را با پوشهٔ انتخاب‌شده همگام می‌کند.
-
-[مجوزها و سورس وابستگی‌های بستهٔ ویندوز](THIRD-PARTY-NOTICES.md)
+[Third-party notices](THIRD-PARTY-NOTICES.md) · [Version history](CHANGES.md)

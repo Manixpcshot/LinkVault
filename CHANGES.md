@@ -1,3 +1,12 @@
+# LinkVault 4.0
+
+- English desktop and mobile interface, including dialogs, settings, menus, and the Windows installer.
+- A pure Black theme, refreshed transitions, and shorter scrolling and card animations.
+- Touch layouts for Android and iOS, native window frames on macOS and Linux, and packaging for AppImage, DMG, APK, and iOS device builds.
+- Portable JSON backups now include collections. Legacy JSON backup and browser HTML import are still supported.
+
+---
+
 # LinkVault 3.0: کالکشن‌ها، پالت فرمان، افزودن سریع، Mica، Snap Layouts، سلامت لینک‌ها، یادآوری و سینک
 
 ## 🪟 ویندوز ۱۱

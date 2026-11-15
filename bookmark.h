@@ -102,8 +102,8 @@ inline QString deletedFile()     { return dataDir() + "/deleted.json"; }   // to
 inline bool writeJson(const QString& path, const QJsonDocument& doc) {
     QSaveFile f(path);
     if (!f.open(QIODevice::WriteOnly)) return false;
-    f.write(doc.toJson());
-    return f.commit();
+    const QByteArray bytes = doc.toJson();
+    return f.write(bytes) == bytes.size() && f.commit();
 }
 
 inline QList<Bookmark> load() {

@@ -1,5 +1,7 @@
 #include "widgets.h"
 #include "theme.h"
+#include "platform.h"
+#include <QApplication>
 #include <QAction>
 #include <QContextMenuEvent>
 #include <QDragEnterEvent>
@@ -753,6 +755,14 @@ void CollectionBar::paintEvent(QPaintEvent*) {
 
 void CollectionBar::mousePressEvent(QMouseEvent* e) {
     if (e->button() != Qt::LeftButton) return;
+    if (Platform::mobile) {
+        m_scrollAnim->stop();
+        m_pressX = e->position().x();
+        m_pressScroll = m_scroll;
+        m_touchDrag = false;
+        m_touchPress.start();
+        return;
+    }
     const int i = hitTest(e->position());
     if (i == -2) { emit addRequested(); return; }
     if (i < 0 || i == m_cur) return;
@@ -762,7 +772,31 @@ void CollectionBar::mousePressEvent(QMouseEvent* e) {
     emit currentChanged(m_chips[i].id);
 }
 
+void CollectionBar::mouseReleaseEvent(QMouseEvent* e) {
+    if (!Platform::mobile || e->button() != Qt::LeftButton || !m_touchPress.isValid()) return;
+    const qint64 held = m_touchPress.elapsed();
+    m_touchPress.invalidate();
+    if (m_touchDrag || !rect().contains(e->position().toPoint())) return;
+    const int i = hitTest(e->position());
+    if (i == -2) emit addRequested();
+    else if (i > 0 && held >= 550) emit menuRequested(m_chips[i].id, e->globalPosition().toPoint());
+    else if (i >= 0 && i != m_cur) {
+        const QString id = m_chips[i].id;
+        setCurrent(id);
+        emit currentChanged(id);
+    }
+}
+
 void CollectionBar::mouseMoveEvent(QMouseEvent* e) {
+    if (Platform::mobile && m_touchPress.isValid() && e->buttons().testFlag(Qt::LeftButton)) {
+        const qreal dx = e->position().x() - m_pressX;
+        m_touchDrag = m_touchDrag || qAbs(dx) >= QApplication::startDragDistance();
+        if (m_touchDrag) {
+            m_scroll = qBound<qreal>(0, m_pressScroll - dx, maxScroll());
+            update();
+        }
+        return;
+    }
     const int i = hitTest(e->position());
     if (i != m_hover) {
         m_hover = i;

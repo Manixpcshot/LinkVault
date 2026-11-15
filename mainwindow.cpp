@@ -24,6 +24,7 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
+#include <QKeyEvent>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QMoveEvent>
@@ -101,7 +102,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_themeMode = qBound(int(Theme::Light), savedMode, int(Theme::Black));
     Theme::animRef() = st.value("animations", true).toBool();
     m_minimizeOnOpen = !Platform::mobile && st.value("minimizeOnOpen", false).toBool();
-    m_useClipboard = st.value("useClipboard", true).toBool();
+    m_useClipboard = st.value("useClipboard", !Platform::mobile).toBool();
     m_sort = qBound(0, st.value("sort", 0).toInt(), 4);
     m_mica = st.value("mica", false).toBool();
     m_closeToTray = st.value("closeToTray", false).toBool();
@@ -281,6 +282,7 @@ QWidget* MainWindow::buildHome() {
 
     auto* addBtn = new QPushButton("+ Add link");
     addBtn->setObjectName("primary");
+    if (Platform::mobile) addBtn->setMinimumHeight(44);
     addBtn->setCursor(Qt::PointingHandCursor);
     connect(addBtn, &QPushButton::clicked, this, &MainWindow::addBookmark);
 
@@ -540,6 +542,20 @@ void MainWindow::closeEvent(QCloseEvent* e) {
 void MainWindow::moveEvent(QMoveEvent* e) {
     QMainWindow::moveEvent(e);
     if (m_backdrop) m_backdrop->setWindowPos(geometry().topLeft());
+}
+
+void MainWindow::keyPressEvent(QKeyEvent* e) {
+    if (Platform::mobile && e->key() == Qt::Key_Back) {
+        if (m_stack->current() == 1) {
+            goHome();
+            return;
+        }
+        if (!m_search->text().isEmpty()) {
+            m_search->clear();
+            return;
+        }
+    }
+    QMainWindow::keyPressEvent(e);
 }
 
 Qt::Edges MainWindow::edgesAt(const QPoint& pos) const {
@@ -949,7 +965,8 @@ void MainWindow::refresh(bool animate) {
             m_emptyText->setText("Try another word or part of the URL.");
         } else if (inScope == 0) {
             m_emptyTitle->setText(QString("“%1” is empty").arg(collectionLabel(m_collectionFilter)));
-            m_emptyText->setText("Drag a card here or choose Move to collection from its menu.");
+            m_emptyText->setText(Platform::mobile ? "Use a bookmark’s menu to move it to this collection."
+                                                 : "Drag a card here or choose Move to collection from its menu.");
         } else if (m_filterMode == 2) {
             m_emptyTitle->setText("All links are healthy");
             m_emptyText->setText("No broken or redirected links were found.");
@@ -1129,34 +1146,60 @@ void MainWindow::commitPendingDelete() {
 // ============================== import / export ==============================
 
 void MainWindow::exportData() {
-    const QString path = QFileDialog::getSaveFileName(this, "Save backup",
-        QDir::homePath() + "/LinkVault-backup.json", "LinkVault (*.json)");
-    if (path.isEmpty()) return;
-    QJsonArray arr;
+    const QUrl file = QFileDialog::getSaveFileUrl(this, "Save backup",
+        QUrl::fromLocalFile(QDir::homePath() + "/LinkVault-backup.json"), "LinkVault (*.json)");
+    if (file.isEmpty()) return;
+    QJsonArray bookmarks;
     for (const auto& b : std::as_const(m_items)) {
         QJsonObject o = b.toJson();
         o.remove("image");
         o.remove("icon");
-        arr.append(o);
+        bookmarks.append(o);
     }
-    QSaveFile f(path);
-    const bool ok = f.open(QIODevice::WriteOnly) && f.write(QJsonDocument(arr).toJson()) >= 0 && f.commit();
+    QJsonArray collections;
+    for (const auto& collection : std::as_const(m_collections)) collections.append(collection.toJson());
+    const QJsonDocument backup(QJsonObject{{"format", "LinkVault"}, {"version", 1},
+                                           {"bookmarks", bookmarks}, {"collections", collections}});
+    bool ok = false;
+    if (file.isLocalFile()) {
+        ok = Storage::writeJson(file.toLocalFile(), backup);
+    } else if (file.scheme() == "content") {
+        const QByteArray bytes = backup.toJson();
+        QFile output(file.toString(QUrl::FullyEncoded));
+        ok = output.open(QIODevice::WriteOnly | QIODevice::Truncate)
+             && output.write(bytes) == bytes.size() && output.flush();
+    }
     showToast(ok ? QString("✓ Exported bookmarks: %1").arg(m_items.size()) : QString("Could not save the file."), 3000);
 }
 
 void MainWindow::importData() {
-    const QString path = QFileDialog::getOpenFileName(this, "Import bookmarks", QDir::homePath(),
+    const QUrl file = QFileDialog::getOpenFileUrl(this, "Import bookmarks", QUrl::fromLocalFile(QDir::homePath()),
         "LinkVault or browser bookmarks (*.json *.html *.htm)");
-    if (path.isEmpty()) return;
-    QFile f(path);
+    if (file.isEmpty()) return;
+    QFile f(file.isLocalFile() ? file.toLocalFile() : file.toString(QUrl::FullyEncoded));
     if (!f.open(QIODevice::ReadOnly)) { showToast("Could not open the file.", 3000); return; }
     const QByteArray data = f.readAll();
 
     QList<Bookmark> incoming;
-    const QString suffix = QFileInfo(path).suffix().toLower();
-    if (suffix == "json") {
+    QList<Collection> incomingCollections;
+    const QByteArray start = data.left(4096).trimmed();
+    if (file.path().endsWith(".json", Qt::CaseInsensitive) || start.startsWith('[') || start.startsWith('{')) {
         const QJsonDocument doc = QJsonDocument::fromJson(data);
-        for (const auto& v : doc.array()) incoming << Bookmark::fromJson(v.toObject());
+        QJsonArray bookmarks;
+        if (doc.isArray()) {
+            bookmarks = doc.array();       // LinkVault 2.x and 3.x backups
+        } else {
+            const auto obj = doc.object();
+            if (obj.value("format") != QJsonValue("LinkVault") || obj.value("version").toInt() != 1
+                || !obj.value("bookmarks").isArray()) {
+                showToast("This LinkVault backup is invalid or uses an unsupported format.", 3000);
+                return;
+            }
+            bookmarks = obj.value("bookmarks").toArray();
+            for (const auto& value : obj.value("collections").toArray())
+                incomingCollections << Collection::fromJson(value.toObject());
+        }
+        for (const auto& v : bookmarks) incoming << Bookmark::fromJson(v.toObject());
     } else {
         // Netscape bookmark format (Chrome / Firefox / Edge export)
         static const QRegularExpression re(R"re(<a\s[^>]*href\s*=\s*"([^"]+)"[^>]*>(.*?)</a>)re",
@@ -1178,6 +1221,14 @@ void MainWindow::importData() {
     for (const auto& b : std::as_const(m_items)) known.insert(QUrl(b.url).adjusted(QUrl::StripTrailingSlash).toString());
     QStringList added;
     const qint64 now = QDateTime::currentSecsSinceEpoch();
+    int collectionsAdded = 0;
+    for (auto collection : incomingCollections) {
+        if (collection.id.isEmpty() || collection.name.isEmpty() || collectionIndex(collection.id) >= 0) continue;
+        collection.modified = now;
+        m_deleted.remove("col:" + collection.id);
+        m_collections.append(collection);
+        ++collectionsAdded;
+    }
     for (Bookmark b : incoming) {
         const QUrl u(b.url);
         if (!(u.scheme() == "http" || u.scheme() == "https") || u.host().isEmpty()) continue;
@@ -1187,18 +1238,19 @@ void MainWindow::importData() {
         b.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         b.imagePath.clear();
         b.iconPath.clear();
+        if (collectionIndex(b.collection) < 0) b.collection.clear();
         if (b.name.isEmpty()) b.name = u.host();
         if (b.created <= 0) b.created = now;
         m_items.append(b);
         added << b.id;
     }
-    if (added.isEmpty()) { showToast("No new bookmarks to import.", 3000); return; }
+    if (added.isEmpty() && !collectionsAdded) { showToast("No new bookmarks or collections to import.", 3000); return; }
     persist();
     for (const auto& id : std::as_const(added)) m_loading.insert(id);
     refreshCollections();
     refresh(false);
     for (const auto& id : std::as_const(added)) startFetch(id);
-    showToast(QString("✓ Imported bookmarks: %1").arg(added.size()), 3000);
+    showToast(QString("✓ Imported: %1 bookmarks · %2 collections").arg(added.size()).arg(collectionsAdded), 3000);
 }
 
 // ============================== thumbnails ==============================
