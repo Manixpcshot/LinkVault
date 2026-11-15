@@ -106,7 +106,8 @@ QSize SegmentedControl::sizeHint() const {
     const QFontMetricsF fm(f);
     qreal w = 0;
     for (const auto& s : m_items) w = qMax(w, fm.horizontalAdvance(s));
-    return QSize(int((w + 34) * qMax<qsizetype>(1, m_items.size())) + 8, 40);
+    const int itemPadding = Platform::mobile ? 16 : 34;
+    return QSize(int((w + itemPadding) * qMax<qsizetype>(1, m_items.size())) + 8, Platform::mobile ? 44 : 40);
 }
 
 void SegmentedControl::setItemText(int i, const QString& t) {

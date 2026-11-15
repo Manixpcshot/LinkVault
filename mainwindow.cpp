@@ -258,6 +258,7 @@ QWidget* MainWindow::buildHome() {
     title->setObjectName("appTitle");
     m_count = new QLabel;
     m_count->setObjectName("muted");
+    m_count->setWordWrap(Platform::mobile);
     titleBox->addWidget(title);
     titleBox->addWidget(m_count);
     header->addWidget(logo);
@@ -319,7 +320,7 @@ QWidget* MainWindow::buildHome() {
     auto* bar = new QHBoxLayout;
     bar->setContentsMargins(0, 0, 0, 0);
     bar->setSpacing(10);
-    m_filter = new SegmentedControl({"All", "📌 Pinned", "⚠️ Issues"});
+    m_filter = new SegmentedControl({"All", "Pinned", "Issues"});
     connect(m_filter, &SegmentedControl::currentChanged, this, [this](int i) {
         m_filterMode = i;
         refresh(true);

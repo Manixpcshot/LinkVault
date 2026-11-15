@@ -2,6 +2,8 @@
 
 LinkVault is a desktop and mobile bookmark manager built with C++17 and Qt 6. Save a link, group it into a collection, and search your library by title or URL.
 
+![The LinkVault library in the Black theme with sample bookmarks](docs/screenshots/v4-black.png)
+
 ## What's new
 
 - English interface for the library, command palette, dialogs, settings, and Windows installer. Bookmark titles and collection names keep their original text.

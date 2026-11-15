@@ -48,6 +48,7 @@ jobs:
           icon=io.github.manixpcshot.linkvault
           cp icon.png "tools/$icon.png"
           cp THIRD-PARTY-NOTICES.md AppDir/usr/share/doc/linkvault/
+          cp -R packaging/licenses AppDir/usr/share/doc/linkvault/
           export PATH="$PWD/tools:$PATH" QMAKE="$QT_ROOT_DIR/bin/qmake"
           export OUTPUT=LinkVault-4.0.0-linux-x86_64.AppImage
           linuxdeploy-x86_64.AppImage --appdir AppDir --executable build/LinkVault \
@@ -81,6 +82,7 @@ jobs:
           cmake --build build --parallel
           lipo build/LinkVault.app/Contents/MacOS/LinkVault -verify_arch arm64 x86_64
           cp THIRD-PARTY-NOTICES.md build/LinkVault.app/Contents/Resources/
+          cp -R packaging/licenses build/LinkVault.app/Contents/Resources/
           macdeployqt build/LinkVault.app -dmg -always-overwrite
           app_dmg="$(find . -maxdepth 2 -name LinkVault.dmg -print -quit)"
           test -n "$app_dmg"
@@ -161,6 +163,7 @@ jobs:
           lipo "$app/LinkVault" -verify_arch arm64
           plutil -lint "$app/Info.plist"
           cp THIRD-PARTY-NOTICES.md "$app/"
+          cp -R packaging/licenses "$app/"
           mkdir -p artifacts
           ditto -c -k --keepParent "$app" artifacts/LinkVault-4.0.0-ios-arm64-unsigned.zip
       - uses: actions/upload-artifact@v4
