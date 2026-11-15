@@ -69,9 +69,6 @@ struct NotesWidgetView: View {
             Label("LinkVault Notes", systemImage: "note.text")
                 .font(.caption).fontWeight(.semibold).foregroundStyle(accent)
             Text(verbatim: entry.title).font(.headline).foregroundStyle(.white).lineLimit(2)
-            if !entry.preview.isEmpty {
-                Text(verbatim: entry.preview).font(.caption).foregroundStyle(.white.opacity(0.75)).lineLimit(2)
-            }
             if let end = entry.deadline {
                 if end > entry.date {
                     Text(timerInterval: entry.date...end, pauseTime: end, countsDown: true)
@@ -79,6 +76,9 @@ struct NotesWidgetView: View {
                 } else {
                     Text("Time’s up").font(.subheadline.bold()).foregroundStyle(accent)
                 }
+            }
+            if !entry.preview.isEmpty {
+                Text(verbatim: entry.preview).font(.caption).foregroundStyle(.white.opacity(0.75)).lineLimit(2)
             }
             Spacer(minLength: 0)
         }

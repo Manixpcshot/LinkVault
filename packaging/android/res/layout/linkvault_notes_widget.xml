@@ -24,15 +24,6 @@
         android:textColor="#FFFFFF"
         android:textSize="18sp"
         android:textStyle="bold" />
-    <TextView
-        android:id="@+id/note_preview"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:ellipsize="end"
-        android:maxLines="2"
-        android:textColor="#D1CEDF"
-        android:textSize="13sp" />
     <Chronometer
         android:id="@+id/note_timer"
         android:layout_width="match_parent"
@@ -51,4 +42,13 @@
         android:textColor="#B9A9FF"
         android:textSize="16sp"
         android:visibility="gone" />
+    <TextView
+        android:id="@+id/note_preview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#D1CEDF"
+        android:textSize="13sp" />
 </LinearLayout>

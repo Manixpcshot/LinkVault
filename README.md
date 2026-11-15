@@ -30,6 +30,8 @@ The [package workflow](https://github.com/Manixpcshot/LinkVault/actions/workflow
 
 Standalone notebook entries are stored locally and included in JSON backups. Desktop folder sync carries bookmark notes and smart collection rules. Use LinkVault 4.1 on each device that writes to the same sync folder to preserve those fields. The Android launcher displays a live countdown and the system may defer its final refresh in the background. On iOS, sign `io.github.manixpcshot.linkvault` and `io.github.manixpcshot.linkvault.notes` with the same team, and enable the `group.io.github.manixpcshot.linkvault` App Group on both provisioning profiles. Add the widget after opening the signed app and saving a note.
 
+If an earlier test-signed Android build has a different signature, export a backup from it before replacing the installed app. Import that backup into LinkVault 4.1.
+
 Windows retains the custom frame, Mica, and system-wide hotkeys. Linux and macOS use native window frames and in-app shortcuts. Close-to-tray requires an available desktop system tray. Folder sync is a desktop feature. Mobile libraries can be moved using **Export** and **Import** in Settings. Mobile reminders are checked while the app runs.
 
 ## Build from source

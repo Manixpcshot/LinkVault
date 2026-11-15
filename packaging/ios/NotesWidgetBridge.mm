@@ -14,9 +14,9 @@ void updateIosNoteWidget(const Note& note) {
             @"preview": note.body.simplified().left(240).toNSString(),
             @"deadline": @(note.deadline)
         };
-        NSData* data = [NSJSONSerialization dataWithJSONObject:snapshot options:NSJSONWritingSortedKeys error:nil];
+        NSData* data = [NSJSONSerialization dataWithJSONObject:snapshot options:NSJSONWritingSortedKeys error:nullptr];
         if (data && ![data isEqualToData:[NSData dataWithContentsOfURL:path]]
-            && [data writeToURL:path options:NSDataWritingAtomic error:nil]) {
+            && [data writeToURL:path options:NSDataWritingAtomic error:nullptr]) {
             reloadLinkVaultNotesWidget();
         }
     }

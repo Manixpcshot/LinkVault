@@ -288,8 +288,10 @@ NotesPage::NotesPage(Notebook* notebook, QWidget* parent) : QWidget(parent), m_n
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidgetResizable(true);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->viewport()->setAutoFillBackground(false);
     if (Platform::mobile) QScroller::grabGesture(scroll->viewport(), QScroller::TouchGesture);
     auto* cards = new QWidget;
+    cards->setObjectName("gridHolder");
     m_cards = new QVBoxLayout(cards);
     m_cards->setContentsMargins(0, 2, 0, 8);
     m_cards->setSpacing(10);
